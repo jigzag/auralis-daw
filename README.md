@@ -275,18 +275,3 @@ JUCE 8.0.6は `vendor/JUCE` に含まれています。CMakeの並列プロセ�
 この実装はAGPL-3.0-onlyで提供します。詳細は `LICENSE.md`、依存物は `vendor/JUCE/LICENSE.md` を参照してください。ASIO SDK 2.3.4はGPLv3の選択肢で利用し、SDKのライセンス・著作権表示は `vendor/ASIO/ASIOSDK` に保持しています。ASIOはSteinberg Media Technologies GmbHの商標です。
 
 MP3エンコーダーは[LAME 3.100](https://lame.sourceforge.io/)（LGPL）を組み込んでいます。ソース・著作権表示・再ビルド用の設定は配布ソースに含みます。取得元とSHA256は `vendor/LAME-SOURCE.txt` を参照してください。
-
-
-## GitHubからの共同開発
-
-非公開リポジトリへのアクセス権を持つアカウントで、次の手順で取得します。
-
-```powershell
-git clone --recurse-submodules https://github.com/jigzag/auralis-daw.git
-cd auralis-daw
-.\build.ps1
-```
-
-Visual Studio 2022のC++ビルドツール、Windows SDK、CMake 3.22以上が必要です。JUCEは固定したコミットのサブモジュールとして取得し、ASIOとLAMEのソースは同梱しています。既にクローン済みの場合は `git submodule update --init --recursive` を実行してください。
-
-機能ごとに作業用ブランチを作り、変更をpushしてPull Requestで確認してからmainへ取り込みます。ビルド成果物・テスト出力・機器設定・個人の録音素材は共有対象から除外しています。Demo内の素材は付属の合成デモです。
