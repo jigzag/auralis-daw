@@ -1,0 +1,7 @@
+LAME 3.100, unmodified upstream sources.
+Project: https://lame.sourceforge.io/
+Official release: https://sourceforge.net/projects/lame/files/lame/3.100/
+Archive mirror: https://download.videolan.org/pub/contrib/lame/lame-3.100.tar.gz
+SHA256: ddfe36cab873794038ae2c1210557ad34857a4b6bdc515785d1da9e175b1da1e
+License: LGPL, see lame-3.100/COPYING, LICENSE and doc/html/contributors.html.
+Built statically from source using configMS.h; full source and CMake build rules are supplied for rebuilding and relinking.

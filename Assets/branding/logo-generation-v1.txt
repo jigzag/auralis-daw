@@ -1,0 +1,22 @@
+Auralis logo generation
+Mode: built-in image_gen
+Selected asset: auralis-logo-dark-v1.png
+
+Final prompt:
+Use case: logo-brand. Create one finished, clean professional horizontal logo for the audio workstation AURALIS, on a perfectly uniform opaque dark navy background #11151B. NOT transparent.
+Symbol on left: a mint #80E3C0 audio waveform flowing into a bold geometric capital A: soft short wave trough on left, rise to central rounded triangular peak, small triangular negative-space counter, soft trough on right and a short upward wave tail. A single continuous smooth silhouette, balanced musical rhythm, moderately thick strokes.
+To its right the exact text "AURALIS", A U R A L I S, refined wide geometric uppercase sans serif, light cool grey #E2E9EE. Very clean readable letterforms, precise spacing, middle alignment with symbol.
+One logo, centered on landscape canvas with generous even margins. Flat solid fills only. Pixel-perfect clean mathematical contours, no texture anywhere, no noise or dust, no grain or scratches, no distressing, no outlines, no bevels, no shadows, no glows, no gradients, no metallic finish, no additional text or slogan. A crisp music software visual identity suitable for the top bar of a dark DAW.
+
+Initial exploration prompt:
+Use case: logo-brand.
+Create a polished, distinctive logo for Auralis, a Windows audio and MIDI digital audio workstation.
+Deliver one horizontal logo lockup on a genuinely transparent background, not a mockup or presentation sheet.
+A compact symbol on the left: an elegant geometric capital A formed from a continuous audio waveform / signal ribbon, with a carefully designed negative-space opening and a subtle sense of forward rhythm. Simple bold silhouette, precise optical balance, readable at small app-icon size. Make it feel like a serious music production instrument. Avoid generic equalizer bars or a stock audio icon.
+On the right the exact word "AURALIS", spelled A U R A L I S, in refined custom geometric uppercase sans-serif, moderately spaced letters, clean readable typography with restrained distinctive cuts.
+Palette: symbol in flat mint green #80E3C0; wordmark in very light cool grey #E2E9EE to work on the app's dark navy UI #11151B. No background navy rectangle: all surrounding space must remain transparent.
+Flat vector-like graphic treatment, crisp smooth edges, professional music software brand, ample clear space around the lockup, centered composition, landscape canvas. No gradients, no glow, no shadows, no 3D, no photos, no slogans, no extra words, no watermarks, no comparison variants.
+
+Transparent exploration refinement:
+Edit the provided AURALIS logo, preserving the exact waveform-A symbol design, letter shapes, spelling AURALIS, mint green symbol and light cool grey wordmark, horizontal layout and genuinely transparent background. Clean up the artwork to pristine flat graphic production quality: remove ALL speckles, stray pixels, scratch marks, distressing, grain, black outlines, white fringe, rough borders and fragmented edges. Reconstruct every silhouette as perfectly smooth geometric edges with clean antialiasing, solid uniform flat fills #80E3C0 for the symbol and #E2E9EE for all letters. No texture, no gradients, no shadows. All empty space including inside letters must be transparent. This is a clean professional software logo master, not a distressed print. Preserve generous padding and original proportions.
+

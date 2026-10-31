@@ -1,0 +1,657 @@
+{
+  "format": "auralis-1",
+  "bpm": 120,
+  "master": 0.8,
+  "cursor": 2,
+  "loop": true,
+  "loopStart": 0,
+  "loopEnd": 16,
+  "tracks": [
+    {
+      "name": "01  Pocket drums",
+      "colour": "ff80e3c0",
+      "gain": 0.8,
+      "pan": 0,
+      "input": 0,
+      "mute": false,
+      "solo": false,
+      "clips": [
+        {
+          "file": "First light_media/01  Pocket drums.wav",
+          "name": "Pocket drums",
+          "start": 0,
+          "offset": 0,
+          "length": 4,
+          "fadeIn": 0.005,
+          "fadeOut": 0.01
+        },
+        {
+          "file": "First light_media/01  Pocket drums.wav",
+          "name": "Pocket drums",
+          "start": 4,
+          "offset": 0,
+          "length": 4,
+          "fadeIn": 0.005,
+          "fadeOut": 0.01
+        },
+        {
+          "file": "First light_media/01  Pocket drums.wav",
+          "name": "Pocket drums",
+          "start": 8,
+          "offset": 0,
+          "length": 4,
+          "fadeIn": 0.005,
+          "fadeOut": 0.01
+        },
+        {
+          "file": "First light_media/01  Pocket drums.wav",
+          "name": "Pocket drums",
+          "start": 12,
+          "offset": 0,
+          "length": 4,
+          "fadeIn": 0.005,
+          "fadeOut": 0.01
+        }
+      ],
+      "plugins": []
+    },
+    {
+      "name": "02  Analog bass",
+      "colour": "ff9ba7ff",
+      "gain": 0.8,
+      "pan": 0,
+      "input": 0,
+      "mute": false,
+      "solo": false,
+      "clips": [
+        {
+          "file": "First light_media/02  Analog bass.wav",
+          "name": "Analog bass",
+          "start": 0,
+          "offset": 0,
+          "length": 4,
+          "fadeIn": 0.005,
+          "fadeOut": 0.01
+        },
+        {
+          "file": "First light_media/02  Analog bass.wav",
+          "name": "Analog bass",
+          "start": 4,
+          "offset": 0,
+          "length": 4,
+          "fadeIn": 0.005,
+          "fadeOut": 0.01
+        },
+        {
+          "file": "First light_media/02  Analog bass.wav",
+          "name": "Analog bass",
+          "start": 8,
+          "offset": 0,
+          "length": 4,
+          "fadeIn": 0.005,
+          "fadeOut": 0.01
+        },
+        {
+          "file": "First light_media/02  Analog bass.wav",
+          "name": "Analog bass",
+          "start": 12,
+          "offset": 0,
+          "length": 4,
+          "fadeIn": 0.005,
+          "fadeOut": 0.01
+        }
+      ],
+      "plugins": []
+    },
+    {
+      "name": "03  Midnight keys",
+      "colour": "ffedb07d",
+      "gain": 0.8,
+      "pan": 0,
+      "input": 0,
+      "mute": false,
+      "solo": false,
+      "clips": [
+        {
+          "file": "First light_media/03  Midnight keys.wav",
+          "name": "Midnight keys",
+          "start": 0,
+          "offset": 0,
+          "length": 4,
+          "fadeIn": 0.005,
+          "fadeOut": 0.01
+        },
+        {
+          "file": "First light_media/03  Midnight keys.wav",
+          "name": "Midnight keys",
+          "start": 4,
+          "offset": 0,
+          "length": 4,
+          "fadeIn": 0.005,
+          "fadeOut": 0.01
+        },
+        {
+          "file": "First light_media/03  Midnight keys.wav",
+          "name": "Midnight keys",
+          "start": 8,
+          "offset": 0,
+          "length": 4,
+          "fadeIn": 0.005,
+          "fadeOut": 0.01
+        },
+        {
+          "file": "First light_media/03  Midnight keys.wav",
+          "name": "Midnight keys",
+          "start": 12,
+          "offset": 0,
+          "length": 4,
+          "fadeIn": 0.005,
+          "fadeOut": 0.01
+        }
+      ],
+      "plugins": []
+    },
+    {
+      "name": "04  MIDI lead",
+      "colour": "ffe58dc6",
+      "midi": true,
+      "midiChannel": 0,
+      "gain": 0.5,
+      "pan": 0.12,
+      "input": 0,
+      "mute": false,
+      "solo": false,
+      "clips": [
+        {
+          "midi": true,
+          "name": "First light / MIDI",
+          "start": 0,
+          "length": 8,
+          "offset": 0,
+          "notes": [
+            {
+              "beat": 0.0,
+              "length": 0.35,
+              "pitch": 72,
+              "velocity": 82,
+              "channel": 1
+            },
+            {
+              "beat": 0.5,
+              "length": 0.35,
+              "pitch": 76,
+              "velocity": 91,
+              "channel": 1
+            },
+            {
+              "beat": 1.0,
+              "length": 0.35,
+              "pitch": 79,
+              "velocity": 100,
+              "channel": 1
+            },
+            {
+              "beat": 1.5,
+              "length": 0.35,
+              "pitch": 83,
+              "velocity": 82,
+              "channel": 1
+            },
+            {
+              "beat": 2.0,
+              "length": 0.35,
+              "pitch": 79,
+              "velocity": 91,
+              "channel": 1
+            },
+            {
+              "beat": 2.5,
+              "length": 0.35,
+              "pitch": 76,
+              "velocity": 100,
+              "channel": 1
+            },
+            {
+              "beat": 3.0,
+              "length": 0.35,
+              "pitch": 74,
+              "velocity": 82,
+              "channel": 1
+            },
+            {
+              "beat": 3.5,
+              "length": 0.35,
+              "pitch": 71,
+              "velocity": 91,
+              "channel": 1
+            },
+            {
+              "beat": 4.0,
+              "length": 0.35,
+              "pitch": 72,
+              "velocity": 100,
+              "channel": 1
+            },
+            {
+              "beat": 4.5,
+              "length": 0.35,
+              "pitch": 76,
+              "velocity": 82,
+              "channel": 1
+            },
+            {
+              "beat": 5.0,
+              "length": 0.35,
+              "pitch": 79,
+              "velocity": 91,
+              "channel": 1
+            },
+            {
+              "beat": 5.5,
+              "length": 0.35,
+              "pitch": 83,
+              "velocity": 100,
+              "channel": 1
+            },
+            {
+              "beat": 6.0,
+              "length": 0.35,
+              "pitch": 79,
+              "velocity": 82,
+              "channel": 1
+            },
+            {
+              "beat": 6.5,
+              "length": 0.35,
+              "pitch": 76,
+              "velocity": 91,
+              "channel": 1
+            },
+            {
+              "beat": 7.0,
+              "length": 0.35,
+              "pitch": 74,
+              "velocity": 100,
+              "channel": 1
+            },
+            {
+              "beat": 7.5,
+              "length": 0.35,
+              "pitch": 71,
+              "velocity": 82,
+              "channel": 1
+            }
+          ],
+          "events": []
+        },
+        {
+          "midi": true,
+          "name": "First light / MIDI",
+          "start": 8,
+          "length": 8,
+          "offset": 0,
+          "notes": [
+            {
+              "beat": 0.0,
+              "length": 0.35,
+              "pitch": 72,
+              "velocity": 82,
+              "channel": 1
+            },
+            {
+              "beat": 0.5,
+              "length": 0.35,
+              "pitch": 76,
+              "velocity": 91,
+              "channel": 1
+            },
+            {
+              "beat": 1.0,
+              "length": 0.35,
+              "pitch": 79,
+              "velocity": 100,
+              "channel": 1
+            },
+            {
+              "beat": 1.5,
+              "length": 0.35,
+              "pitch": 83,
+              "velocity": 82,
+              "channel": 1
+            },
+            {
+              "beat": 2.0,
+              "length": 0.35,
+              "pitch": 79,
+              "velocity": 91,
+              "channel": 1
+            },
+            {
+              "beat": 2.5,
+              "length": 0.35,
+              "pitch": 76,
+              "velocity": 100,
+              "channel": 1
+            },
+            {
+              "beat": 3.0,
+              "length": 0.35,
+              "pitch": 74,
+              "velocity": 82,
+              "channel": 1
+            },
+            {
+              "beat": 3.5,
+              "length": 0.35,
+              "pitch": 71,
+              "velocity": 91,
+              "channel": 1
+            },
+            {
+              "beat": 4.0,
+              "length": 0.35,
+              "pitch": 72,
+              "velocity": 100,
+              "channel": 1
+            },
+            {
+              "beat": 4.5,
+              "length": 0.35,
+              "pitch": 76,
+              "velocity": 82,
+              "channel": 1
+            },
+            {
+              "beat": 5.0,
+              "length": 0.35,
+              "pitch": 79,
+              "velocity": 91,
+              "channel": 1
+            },
+            {
+              "beat": 5.5,
+              "length": 0.35,
+              "pitch": 83,
+              "velocity": 100,
+              "channel": 1
+            },
+            {
+              "beat": 6.0,
+              "length": 0.35,
+              "pitch": 79,
+              "velocity": 82,
+              "channel": 1
+            },
+            {
+              "beat": 6.5,
+              "length": 0.35,
+              "pitch": 76,
+              "velocity": 91,
+              "channel": 1
+            },
+            {
+              "beat": 7.0,
+              "length": 0.35,
+              "pitch": 74,
+              "velocity": 100,
+              "channel": 1
+            },
+            {
+              "beat": 7.5,
+              "length": 0.35,
+              "pitch": 71,
+              "velocity": 82,
+              "channel": 1
+            }
+          ],
+          "events": []
+        },
+        {
+          "midi": true,
+          "name": "First light / MIDI",
+          "start": 16,
+          "length": 8,
+          "offset": 0,
+          "notes": [
+            {
+              "beat": 0.0,
+              "length": 0.35,
+              "pitch": 72,
+              "velocity": 82,
+              "channel": 1
+            },
+            {
+              "beat": 0.5,
+              "length": 0.35,
+              "pitch": 76,
+              "velocity": 91,
+              "channel": 1
+            },
+            {
+              "beat": 1.0,
+              "length": 0.35,
+              "pitch": 79,
+              "velocity": 100,
+              "channel": 1
+            },
+            {
+              "beat": 1.5,
+              "length": 0.35,
+              "pitch": 83,
+              "velocity": 82,
+              "channel": 1
+            },
+            {
+              "beat": 2.0,
+              "length": 0.35,
+              "pitch": 79,
+              "velocity": 91,
+              "channel": 1
+            },
+            {
+              "beat": 2.5,
+              "length": 0.35,
+              "pitch": 76,
+              "velocity": 100,
+              "channel": 1
+            },
+            {
+              "beat": 3.0,
+              "length": 0.35,
+              "pitch": 74,
+              "velocity": 82,
+              "channel": 1
+            },
+            {
+              "beat": 3.5,
+              "length": 0.35,
+              "pitch": 71,
+              "velocity": 91,
+              "channel": 1
+            },
+            {
+              "beat": 4.0,
+              "length": 0.35,
+              "pitch": 72,
+              "velocity": 100,
+              "channel": 1
+            },
+            {
+              "beat": 4.5,
+              "length": 0.35,
+              "pitch": 76,
+              "velocity": 82,
+              "channel": 1
+            },
+            {
+              "beat": 5.0,
+              "length": 0.35,
+              "pitch": 79,
+              "velocity": 91,
+              "channel": 1
+            },
+            {
+              "beat": 5.5,
+              "length": 0.35,
+              "pitch": 83,
+              "velocity": 100,
+              "channel": 1
+            },
+            {
+              "beat": 6.0,
+              "length": 0.35,
+              "pitch": 79,
+              "velocity": 82,
+              "channel": 1
+            },
+            {
+              "beat": 6.5,
+              "length": 0.35,
+              "pitch": 76,
+              "velocity": 91,
+              "channel": 1
+            },
+            {
+              "beat": 7.0,
+              "length": 0.35,
+              "pitch": 74,
+              "velocity": 100,
+              "channel": 1
+            },
+            {
+              "beat": 7.5,
+              "length": 0.35,
+              "pitch": 71,
+              "velocity": 82,
+              "channel": 1
+            }
+          ],
+          "events": []
+        },
+        {
+          "midi": true,
+          "name": "First light / MIDI",
+          "start": 24,
+          "length": 8,
+          "offset": 0,
+          "notes": [
+            {
+              "beat": 0.0,
+              "length": 0.35,
+              "pitch": 72,
+              "velocity": 82,
+              "channel": 1
+            },
+            {
+              "beat": 0.5,
+              "length": 0.35,
+              "pitch": 76,
+              "velocity": 91,
+              "channel": 1
+            },
+            {
+              "beat": 1.0,
+              "length": 0.35,
+              "pitch": 79,
+              "velocity": 100,
+              "channel": 1
+            },
+            {
+              "beat": 1.5,
+              "length": 0.35,
+              "pitch": 83,
+              "velocity": 82,
+              "channel": 1
+            },
+            {
+              "beat": 2.0,
+              "length": 0.35,
+              "pitch": 79,
+              "velocity": 91,
+              "channel": 1
+            },
+            {
+              "beat": 2.5,
+              "length": 0.35,
+              "pitch": 76,
+              "velocity": 100,
+              "channel": 1
+            },
+            {
+              "beat": 3.0,
+              "length": 0.35,
+              "pitch": 74,
+              "velocity": 82,
+              "channel": 1
+            },
+            {
+              "beat": 3.5,
+              "length": 0.35,
+              "pitch": 71,
+              "velocity": 91,
+              "channel": 1
+            },
+            {
+              "beat": 4.0,
+              "length": 0.35,
+              "pitch": 72,
+              "velocity": 100,
+              "channel": 1
+            },
+            {
+              "beat": 4.5,
+              "length": 0.35,
+              "pitch": 76,
+              "velocity": 82,
+              "channel": 1
+            },
+            {
+              "beat": 5.0,
+              "length": 0.35,
+              "pitch": 79,
+              "velocity": 91,
+              "channel": 1
+            },
+            {
+              "beat": 5.5,
+              "length": 0.35,
+              "pitch": 83,
+              "velocity": 100,
+              "channel": 1
+            },
+            {
+              "beat": 6.0,
+              "length": 0.35,
+              "pitch": 79,
+              "velocity": 82,
+              "channel": 1
+            },
+            {
+              "beat": 6.5,
+              "length": 0.35,
+              "pitch": 76,
+              "velocity": 91,
+              "channel": 1
+            },
+            {
+              "beat": 7.0,
+              "length": 0.35,
+              "pitch": 74,
+              "velocity": 100,
+              "channel": 1
+            },
+            {
+              "beat": 7.5,
+              "length": 0.35,
+              "pitch": 71,
+              "velocity": 82,
+              "channel": 1
+            }
+          ],
+          "events": []
+        }
+      ],
+      "plugins": []
+    }
+  ]
+}
