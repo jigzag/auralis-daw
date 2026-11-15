@@ -167,6 +167,7 @@ public:
     std::shared_ptr<SourceAudio> readAudio(const File&);
     void importAudio(const File&, int track, double start);
     double duration() const;
+    double effectTailSeconds() const;
     void play();
     void stop();
     void seek(double);
@@ -204,6 +205,7 @@ private:
     friend void runMasterInsertTests(const File&, StringArray&);
     friend void runEqualizerTests(const File&, StringArray&);
     friend void runNativeDynamicsTests(const File&, StringArray&);
+    friend void runSpaceEffectsTests(const File&, StringArray&);
     friend void runRecordingAlignmentTests(const File&, StringArray&);
     friend void runRecordingWaveformTests(const File&, StringArray&);
     void exportMix(const File&, double start, double end, int bits, int kbps);
@@ -267,6 +269,7 @@ void runPitchZoomTests(const File&, StringArray& passed);
 void runPitchLoopTests(const File&, StringArray& passed);
 void runEqualizerTests(const File&, StringArray& passed);
 void runNativeDynamicsTests(const File&, StringArray& passed);
+void runSpaceEffectsTests(const File&, StringArray& passed);
 void runClipTrimTests(const File&, StringArray& passed);
 void runOverlapTests(const File&, StringArray& passed);
 void runLoopTests(const File&, StringArray& passed);

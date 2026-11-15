@@ -44,11 +44,11 @@ bool Workstation::setTrackDetails(const String& id, const String& name, int chan
 }
 bool Workstation::trackInsertAction(const String& trackId, const String& insertId, int action) {
     if (busy || engine.recording) return false;
-    if (action >= 5 && action <= 7 && insertId.isEmpty()) {
+    if (action >= 5 && action <= 9 && insertId.isEmpty()) {
         int index = -1;
         if (trackId.isNotEmpty()) { for (int i = 0; i < int(engine.tracks.size()); ++i) if (engine.tracks[size_t(i)]->id == trackId) index = i; if (index < 0) return false; }
         try {
-            const auto kind = action == 5 ? NativeEffectKind::equalizer : action == 6 ? NativeEffectKind::tuner : NativeEffectKind::compressor;
+            const auto kind = action == 5 ? NativeEffectKind::equalizer : action == 6 ? NativeEffectKind::tuner : action == 7 ? NativeEffectKind::compressor : action == 8 ? NativeEffectKind::reverb : NativeEffectKind::delay;
             engine.addPlugin(index, nativeDescription(kind)); changed(); refresh();
             const auto id = index == -1 ? engine.masterInserts.back()->id : engine.tracks[size_t(index)]->inserts.back()->id;
             return trackInsertAction(trackId, id, 1);
@@ -86,7 +86,9 @@ void Workstation::trackInsertMenu(const String& trackId, const String& insertId,
     if (add) {
         menu.addItem(5, String::fromUTF8("内蔵 EQ（音色・周波数調整）..."));
         menu.addItem(6, String::fromUTF8("内蔵チューナー（単音の調律）..."));
-        menu.addItem(7, String::fromUTF8("内蔵コンプレッサー（音量差を整える）...")); menu.addSeparator();
+        menu.addItem(7, String::fromUTF8("内蔵コンプレッサー（音量差を整える）..."));
+        menu.addItem(8, String::fromUTF8("内蔵リバーブ（残響・空間を加える）..."));
+        menu.addItem(9, String::fromUTF8("内蔵ディレイ（反復・やまびこ）...")); menu.addSeparator();
         const auto scanned = pluginPurposeMenu(types, 100);
         for (PopupMenu::MenuItemIterator item(scanned); item.next();) menu.addItem(item.getItem());
     } else { menu.addItem(1, "Open editor", insertId.isNotEmpty()); menu.addItem(2, "Toggle bypass", insertId.isNotEmpty()); menu.addItem(3, "Remove insert", insertId.isNotEmpty()); }

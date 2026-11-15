@@ -1,5 +1,6 @@
 #include "Engine.h"
 #include "NativeEffects.h"
+#include "SpaceEffects.h"
 #include <cmath>
 #include <stdexcept>
 #include <lame.h>
@@ -145,6 +146,13 @@ double Engine::duration() const {
     double end = 0;
     for (auto& t : tracks) for (auto& c : t->clips) end = jmax(end, c.endTime(bpm));
     return end;
+}
+double Engine::effectTailSeconds() const {
+    const ScopedLock guard(lock);
+    auto tail = [this](const auto& chain) { double length = 0; for (const auto& p : chain) if (!p->bypass) { const auto* delay = dynamic_cast<const DelayEffect*>(p->instance.get()); const double seconds = delay ? delay->tailSeconds(bpm.load()) : p->instance->getTailLengthSeconds(); if (seconds > 0) length += jmin(120.0, seconds); } return jmin(120.0, length); };
+    bool anySolo = false; for (const auto& t : tracks) anySolo |= t->solo;
+    double tracksTail = 0; for (const auto& t : tracks) if (!t->mute && (!anySolo || t->solo) && !t->clips.empty()) tracksTail = jmax(tracksTail, tail(t->inserts));
+    return jmin(120.0, tracksTail + tail(masterInserts));
 }
 void Engine::stampNewClip(Clip& clip) { const ScopedLock guard(lock); clip.order = nextClipOrder++; }
 void Engine::buildClipOwners(Track& track, double position, int n, int first, int last) {
@@ -554,8 +562,13 @@ void Engine::exportMix(const File& file, double start, double end, int bits, int
         }
         for (auto& t : tracks) for (auto& p : t->inserts) { p->instance->reset(); p->instance->setNonRealtime(true); }
         for (auto& p : masterInserts) { p->instance->reset(); p->instance->setNonRealtime(true); }
-        cursor = start; clipped = 0; midiDiscontinuity = true;
+        const auto warmFrames = jmin<int64>(int64(std::floor(start * rate)), int64(std::ceil(effectTailSeconds() * rate)));
+        cursor = start - warmFrames / rate; clipped = 0; midiDiscontinuity = true;
         AudioBuffer<float> output(2, block);
+        // Reconstruct the effect history before the selection, discarding preroll audio.
+        // Preserve MIDI/synth state across the exact selection boundary.
+        for (int64 warm = warmFrames; warm > 0;) { const int count = int(jmin<int64>(block, warm)); render(output.getArrayOfWritePointers(), 2, count); warm -= count; }
+        cursor = start; clipped = 0;
         auto remaining = int64(std::llround((end - start) * rate));
         while (remaining > 0) {
             int n = int(jmin<int64>(block, remaining));

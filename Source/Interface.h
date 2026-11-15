@@ -205,6 +205,7 @@ private:
     friend void runMasterInsertTests(const File&, StringArray&);
     friend void runEqualizerTests(const File&, StringArray&);
     friend void runNativeDynamicsTests(const File&, StringArray&);
+    friend void runSpaceEffectsTests(const File&, StringArray&);
     friend void runProjectOpenTests(const File&, StringArray&);
     friend void runTrackDeleteTests(const File&, StringArray&);
     friend void runClipGainTests(const File&, StringArray&);
@@ -283,6 +284,7 @@ private:
     void markProjectSaved();
     void open();
     void exportAudio();
+    Range<double> defaultExportRange() const;
     void audioSettings();
     void audioDiagnostics();
     void scanPlugins();

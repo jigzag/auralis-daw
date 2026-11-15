@@ -1329,12 +1329,14 @@ void Workstation::runBackground(std::function<String()> work, std::function<void
             if (ok && done) done(); if (!ok) safe->error(message); safe->refresh(); });
     });
 }
+Range<double> Workstation::defaultExportRange() const {
+    return hasTimeSelection ? timeSelection : Range<double>(0, jmax(1.0, engine.duration()) + jmax(2.0, engine.effectTailSeconds()));
+}
 void Workstation::exportAudio() {
     if (engine.recording) { error("Stop recording before exporting."); return; }
     if (blockForPitchEdits()) return;
-    const double startDefault = hasTimeSelection ? timeSelection.getStart() : 0;
-    const double endDefault = hasTimeSelection ? timeSelection.getEnd() : jmax(1.0, engine.duration()) + 2;
-    auto* dialog = new AlertWindow("Export audio", hasTimeSelection ? "Export the selected time range as stereo WAV or MP3." : "Stereo WAV or MP3. Extend End to include effect tails.", MessageBoxIconType::NoIcon);
+    const auto bounds = defaultExportRange(); const double startDefault = bounds.getStart(), endDefault = bounds.getEnd();
+    auto* dialog = new AlertWindow("Export audio", hasTimeSelection ? "Export the selected time range as stereo WAV or MP3." : "Stereo WAV or MP3. Default End includes estimated effect tails; adjust as needed.", MessageBoxIconType::NoIcon);
     dialog->addTextEditor("start", String(startDefault, 6), "Start (seconds)"); dialog->addTextEditor("end", String(endDefault, 6), "End (seconds)");
     dialog->addComboBox("bits", {"WAV / 24-bit PCM", "WAV / 16-bit PCM", "WAV / 32-bit float", "MP3 / 320 kbps", "MP3 / 256 kbps", "MP3 / 192 kbps", "MP3 / 128 kbps"}, "Format");
     dialog->addButton("Choose destination", 1); dialog->addButton("Cancel", 0);

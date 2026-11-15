@@ -3,7 +3,7 @@
 #include <cmath>
 
 namespace auralis {
-enum class NativeEffectKind { equalizer, tuner, compressor };
+enum class NativeEffectKind { equalizer, tuner, compressor, reverb, delay };
 PluginDescription nativeDescription(NativeEffectKind);
 bool isNativeEffect(const PluginDescription&);
 std::unique_ptr<AudioPluginInstance> createNativeEffect(const PluginDescription&);

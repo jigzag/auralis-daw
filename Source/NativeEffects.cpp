@@ -2,25 +2,32 @@
 #include "Equalizer.h"
 #include "Compressor.h"
 #include "Tuner.h"
+#include "SpaceEffects.h"
 
 namespace auralis {
 PluginDescription nativeDescription(NativeEffectKind kind) {
     if (kind == NativeEffectKind::equalizer) return equalizerDescription();
-    PluginDescription p; const bool tuner = kind == NativeEffectKind::tuner;
-    p.name = p.descriptiveName = tuner ? "Auralis Tuner" : "Auralis Compressor"; p.pluginFormatName = "Auralis";
-    p.category = tuner ? "Analyzer/Tuner" : "Dynamics/Compressor"; p.manufacturerName = "Auralis"; p.version = "1.0";
-    p.fileOrIdentifier = tuner ? "auralis:tuner:v1" : "auralis:compressor:v1"; p.uniqueId = tuner ? 0x41545531 : 0x41435031;
+    PluginDescription p;
+    switch (kind) {
+        case NativeEffectKind::tuner: p.name = "Auralis Tuner"; p.category = "Analyzer/Tuner"; p.fileOrIdentifier = "auralis:tuner:v1"; p.uniqueId = 0x41545531; break;
+        case NativeEffectKind::reverb: p.name = "Auralis Reverb"; p.category = "Reverb"; p.fileOrIdentifier = "auralis:reverb:v1"; p.uniqueId = 0x41525631; break;
+        case NativeEffectKind::delay: p.name = "Auralis Delay"; p.category = "Delay"; p.fileOrIdentifier = "auralis:delay:v1"; p.uniqueId = 0x41445931; break;
+        default: p.name = "Auralis Compressor"; p.category = "Dynamics/Compressor"; p.fileOrIdentifier = "auralis:compressor:v1"; p.uniqueId = 0x41435031; break;
+    }
+    p.descriptiveName = p.name; p.pluginFormatName = "Auralis"; p.manufacturerName = "Auralis"; p.version = "1.0";
     p.isInstrument = false; p.numInputChannels = p.numOutputChannels = 2; return p;
 }
 bool isNativeEffect(const PluginDescription& p) {
     if (p.pluginFormatName != "Auralis") return false;
-    for (auto kind : {NativeEffectKind::equalizer, NativeEffectKind::tuner, NativeEffectKind::compressor}) if (p.fileOrIdentifier == nativeDescription(kind).fileOrIdentifier) return true;
+    for (auto kind : {NativeEffectKind::equalizer, NativeEffectKind::tuner, NativeEffectKind::compressor, NativeEffectKind::reverb, NativeEffectKind::delay}) if (p.fileOrIdentifier == nativeDescription(kind).fileOrIdentifier) return true;
     return false;
 }
 std::unique_ptr<AudioPluginInstance> createNativeEffect(const PluginDescription& p) {
     if (!isNativeEffect(p)) return {};
     if (p.fileOrIdentifier == "auralis:equalizer:v1") return std::make_unique<Equalizer>();
     if (p.fileOrIdentifier == "auralis:tuner:v1") return std::make_unique<Tuner>();
+    if (p.fileOrIdentifier == "auralis:reverb:v1") return std::make_unique<ReverbEffect>();
+    if (p.fileOrIdentifier == "auralis:delay:v1") return std::make_unique<DelayEffect>();
     return std::make_unique<Compressor>();
 }
 NativeEffect::NativeEffect(NativeEffectKind kind)
