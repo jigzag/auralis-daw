@@ -187,7 +187,7 @@
   "Drag the bottom edge to resize this track": "下端をドラッグしてトラックの高さを調整します。",
   "Drag the track number or empty header area to reorder tracks": "トラック番号・左欄の余白を上下にドラッグして並べ替えます。",
   "Drag to move the playhead. Shift: snap to beats.": "ドラッグして再生位置を移動。Shift: 拍に吸着。",
-  "Drag to select a time range. L: repeat. P: punch in. Export uses this range.": "ドラッグして範囲選択。L: 繰り返し。P: 範囲録音。書き出しにもこの範囲を使います。",
+  "Drag to select a time range. L: repeat. P: punch in. Export uses this range.": "ドラッグして範囲選択。右クリック: 選択解除。L: 繰り返し。P: 範囲録音。書き出しにもこの範囲を使います。",
   "Select or drag a part. Drag its edge to trim. Shift-drag: select a time range.": "パートを選択・ドラッグで移動。端で長さ調整。Shift+ドラッグで時間範囲選択。",
   "Stop playback / recording and silence all MIDI notes (Esc)": "再生・録音と、すべてのMIDI音を停止します (Esc)。",
   "BPM click during playback and recording; accent every 4 beats. Excluded from recordings and WAV export.": "再生・録音中にテンポ音を鳴らします。4拍ごとに強拍。録音・書き出しには含めません。",

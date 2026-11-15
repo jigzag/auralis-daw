@@ -409,6 +409,13 @@ void Timeline::mouseDown(const MouseEvent& e) {
     draggingPlayhead = false; selectingTime = false; dragTrack = -1; dragRemembered = false;
     if (owner.busy || owner.engine.recording) return;
     headerDrag = -1; headerDrop = -1; dropTrack = -1;
+    if (e.mods.isPopupMenu() && e.y >= seekLaneHeight && e.y < ruler) {
+        if (owner.hasTimeSelection) {
+            owner.hasTimeSelection = false;
+            owner.setStatus(String::fromUTF8("時間範囲の選択を解除しました。")); owner.refresh();
+        }
+        return;
+    }
     if (e.x < header && e.y >= ruler && e.mods.isLeftButtonDown()) {
         int t = trackAt(e.position.y); if (t >= 0) {
             headerDrag = t; headerDrop = t; headerStartY = e.position.y; resizeStartHeight = trackHeight(t);

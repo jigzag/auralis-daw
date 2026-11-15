@@ -15,6 +15,17 @@ void runFixedRulerTests(const File& directory, StringArray& passed) {
     check(std::abs(w.engine.cursor - 4.75) < 1e-9 && !w.hasTimeSelection, "Fixed PLAYHEAD dragging seeks correctly without including the vertical viewport offset");
     auto from = event(2, 38), to = event(6, 38); bar.mouseDown(from); bar.mouseDrag(to); bar.mouseUp(to);
     check(w.timeSelection == Range<double>(2, 6) && std::abs(w.engine.cursor - 4.75) < 1e-9, "Fixed RANGE dragging selects time without moving the playhead after scrolling");
+    auto right = [&](float x) { const auto now = Time::getCurrentTime(); Point<float> p(x, 38); return MouseEvent(Desktop::getInstance().getMainMouseSource(), p, ModifierKeys(ModifierKeys::rightButtonModifier), 1, 0, 0, 0, 0, &bar, &bar, now, p, now, 1, false); };
+    w.engine.loop = true; w.engine.loopStart = 2; w.engine.loopEnd = 6; w.engine.recordRange = true; w.engine.recordFrom = 2; w.engine.recordTo = 6; w.refresh(); w.markProjectSaved(); w.engine.playing = true;
+    auto clearRange = right(t.xAt(3)); bar.mouseDown(clearRange); bar.mouseDrag(clearRange); bar.mouseUp(clearRange);
+    check(!w.hasTimeSelection && w.engine.playing && std::abs(w.engine.cursor - 4.75) < 1e-9 && !w.dirty && w.engine.loop && w.engine.loopStart == 2 && w.engine.loopEnd == 6 && w.engine.recordRange,
+          "Right-clicking fixed RANGE clears only the time selection without seeking, stopping playback or changing loop/punch settings");
+    w.engine.playing = false; w.setTimeSelection(2, 6); auto labelClear = right(14); bar.mouseDown(labelClear); bar.mouseUp(labelClear);
+    check(!w.hasTimeSelection && std::abs(w.engine.cursor - 4.75) < 1e-9, "Right-click also clears the RANGE label after vertical scrolling");
+    w.setTimeSelection(2, 6); w.busy = true; bar.mouseDown(clearRange); bar.mouseUp(clearRange); w.busy = false;
+    check(w.hasTimeSelection, "Busy work protects time selection from right-click clearing");
+    w.engine.recording = true; bar.mouseDown(clearRange); bar.mouseUp(clearRange); w.engine.recording = false;
+    check(w.hasTimeSelection, "Recording protects time selection from right-click clearing");
     w.engine.recording = true; bar.mouseDown(down); bar.mouseDrag(move); bar.mouseUp(move); bar.mouseDown(from); bar.mouseUp(from); w.engine.recording = false;
     check(w.timeSelection == Range<double>(2, 6) && std::abs(w.engine.cursor - 4.75) < 1e-9, "Fixed ruler respects recording seek and range-selection guards");
     t.scroll = 5; w.refresh(); auto scrolled = event(7.25, 12); bar.mouseDown(scrolled); bar.mouseUp(scrolled);
@@ -28,6 +39,6 @@ void runFixedRulerTests(const File& directory, StringArray& passed) {
     check(bar.getY() == w.viewport.getY() && bar.getWidth() == t.getWidth() && bar.getBottom() < w.horizontal.getY(), "Fixed lanes remain aligned after transport expansion, mixer toggle and window resize");
     w.toggleMixer(); w.transportExpanded = false; w.setSize(1400, 880); w.resized(); w.setTimelineZoom(70); t.scroll = 0; w.refresh(); w.viewport.setViewPosition(0, 300);
     if (auto stream = directory.getChildFile("fixed-ruler-preview.png").createOutputStream()) { stream->setPosition(0); stream->truncate(); PNGImageFormat().writeImageToStream(w.createComponentSnapshot(w.getLocalBounds()), *stream); }
-    directory.getChildFile("fixed-ruler-verification.txt").replaceWithText("Native GUI handlers with no hardware opened. Verified fixed lane bounds during vertical scrolling, seek/range coordinate forwarding, recording guards, horizontal alignment, pointer-anchored zoom and mixer/transport/window relayout. Fixed ruler painting skips all track waveform loops.\n");
+    directory.getChildFile("fixed-ruler-verification.txt").replaceWithText("Native GUI handlers with no hardware opened. Verified fixed lane bounds during vertical scrolling, seek/range coordinate forwarding, right-click range and label clearing without altering playback/loop/punch or saved state, busy/recording guards, horizontal alignment, pointer-anchored zoom and mixer/transport/window relayout. Fixed ruler painting skips all track waveform loops.\n");
 }
 }
