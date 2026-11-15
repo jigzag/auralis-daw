@@ -1,5 +1,5 @@
 #include "Engine.h"
-#include "Equalizer.h"
+#include "NativeEffects.h"
 #include <cmath>
 #include <stdexcept>
 #include <lame.h>
@@ -272,7 +272,7 @@ void Engine::addPlugin(int index, const PluginDescription& description, const Me
     require(index != -1 || !description.isInstrument, "Master inserts accept audio effects only.");
     String error;
     std::unique_ptr<AudioPluginInstance> instance;
-    if (isEqualizer(description)) instance = std::make_unique<Equalizer>();
+    if (isNativeEffect(description)) instance = createNativeEffect(description);
     else instance = pluginFormats.createPluginInstance(description, rate, block, error);
     require(instance != nullptr, "Plugin could not be opened: " + error);
     auto layout = instance->getBusesLayout();

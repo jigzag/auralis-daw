@@ -1,7 +1,7 @@
 #include "Interface.h"
 #include "Mixer.h"
 #include "PluginInfo.h"
-#include "Equalizer.h"
+#include "NativeEffects.h"
 namespace auralis {
 bool Workstation::toggleTrackExpanded(const String& id) {
     if (busy || engine.recording) return false;
@@ -44,11 +44,12 @@ bool Workstation::setTrackDetails(const String& id, const String& name, int chan
 }
 bool Workstation::trackInsertAction(const String& trackId, const String& insertId, int action) {
     if (busy || engine.recording) return false;
-    if (action == 5 && insertId.isEmpty()) {
+    if (action >= 5 && action <= 7 && insertId.isEmpty()) {
         int index = -1;
         if (trackId.isNotEmpty()) { for (int i = 0; i < int(engine.tracks.size()); ++i) if (engine.tracks[size_t(i)]->id == trackId) index = i; if (index < 0) return false; }
         try {
-            engine.addPlugin(index, equalizerDescription()); changed(); refresh();
+            const auto kind = action == 5 ? NativeEffectKind::equalizer : action == 6 ? NativeEffectKind::tuner : NativeEffectKind::compressor;
+            engine.addPlugin(index, nativeDescription(kind)); changed(); refresh();
             const auto id = index == -1 ? engine.masterInserts.back()->id : engine.tracks[size_t(index)]->inserts.back()->id;
             return trackInsertAction(trackId, id, 1);
         } catch (const std::exception& e) { error(e.what()); return false; }
@@ -83,7 +84,9 @@ void Workstation::trackInsertMenu(const String& trackId, const String& insertId,
     auto types = knownPlugins.getTypes();
     if (trackId.isEmpty()) for (int i = types.size(); --i >= 0;) if (types[i].isInstrument) types.remove(i);
     if (add) {
-        menu.addItem(5, String::fromUTF8("内蔵 EQ（音色・周波数調整）...")); menu.addSeparator();
+        menu.addItem(5, String::fromUTF8("内蔵 EQ（音色・周波数調整）..."));
+        menu.addItem(6, String::fromUTF8("内蔵チューナー（単音の調律）..."));
+        menu.addItem(7, String::fromUTF8("内蔵コンプレッサー（音量差を整える）...")); menu.addSeparator();
         const auto scanned = pluginPurposeMenu(types, 100);
         for (PopupMenu::MenuItemIterator item(scanned); item.next();) menu.addItem(item.getItem());
     } else { menu.addItem(1, "Open editor", insertId.isNotEmpty()); menu.addItem(2, "Toggle bypass", insertId.isNotEmpty()); menu.addItem(3, "Remove insert", insertId.isNotEmpty()); }

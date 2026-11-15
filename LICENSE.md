@@ -18,7 +18,7 @@ see vendor/JUCE/LICENSE.md and the corresponding source directories.
 
 The complete corresponding source, including the pinned JUCE dependency,
 Steinberg ASIO SDK 2.3.4 (used under its GPLv3 alternative), and build scripts,
-accompanies this application in the Auralis-0.4.32-source archive.
+accompanies this application in the Auralis-0.4.33-source archive.
 ASIO is a trademark of Steinberg Media Technologies GmbH.
 
 MP3 encoding uses LAME 3.100 under the LGPL. Copyright and license notices are in

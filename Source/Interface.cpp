@@ -3,7 +3,7 @@
 #include "PitchRoll.h"
 #include "Mixer.h"
 #include "PluginInfo.h"
-#include "Equalizer.h"
+#include "NativeEffects.h"
 #include "ProjectStart.h"
 #include "BrandingData.h"
 #include <cmath>
@@ -545,7 +545,7 @@ PluginWindow::PluginWindow(AudioPluginInstance& plugin) : DocumentWindow(plugin.
     auto* editor = plugin.createEditorIfNeeded();
     if (!editor) editor = new GenericAudioProcessorEditor(plugin);
     setContentOwned(editor, true); setResizable(editor->isResizable(), false);
-    if (dynamic_cast<Equalizer*>(&plugin)) if (auto* limits = editor->getConstrainer()) {
+    if (isNativeEffect(plugin.getPluginDescription())) if (auto* limits = editor->getConstrainer()) {
         const int frameW = getWidth() - editor->getWidth(), frameH = getHeight() - editor->getHeight();
         setResizeLimits(limits->getMinimumWidth() + frameW, limits->getMinimumHeight() + frameH, limits->getMaximumWidth() + frameW, limits->getMaximumHeight() + frameH);
     }

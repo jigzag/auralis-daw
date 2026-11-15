@@ -203,6 +203,7 @@ private:
     friend void runTrackDragTests(const File&, StringArray&);
     friend void runMasterInsertTests(const File&, StringArray&);
     friend void runEqualizerTests(const File&, StringArray&);
+    friend void runNativeDynamicsTests(const File&, StringArray&);
     friend void runRecordingAlignmentTests(const File&, StringArray&);
     friend void runRecordingWaveformTests(const File&, StringArray&);
     void exportMix(const File&, double start, double end, int bits, int kbps);
@@ -265,6 +266,7 @@ void runPitchCurveTests(const File&, StringArray& passed);
 void runPitchZoomTests(const File&, StringArray& passed);
 void runPitchLoopTests(const File&, StringArray& passed);
 void runEqualizerTests(const File&, StringArray& passed);
+void runNativeDynamicsTests(const File&, StringArray& passed);
 void runClipTrimTests(const File&, StringArray& passed);
 void runOverlapTests(const File&, StringArray& passed);
 void runLoopTests(const File&, StringArray& passed);

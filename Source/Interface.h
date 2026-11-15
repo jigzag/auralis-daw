@@ -204,6 +204,7 @@ private:
     friend void runFixedRulerTests(const File&, StringArray&);
     friend void runMasterInsertTests(const File&, StringArray&);
     friend void runEqualizerTests(const File&, StringArray&);
+    friend void runNativeDynamicsTests(const File&, StringArray&);
     friend void runProjectOpenTests(const File&, StringArray&);
     friend void runTrackDeleteTests(const File&, StringArray&);
     friend void runClipGainTests(const File&, StringArray&);

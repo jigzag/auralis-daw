@@ -136,6 +136,7 @@ int runSelfTests(const File& directory) {
         runPluginInfoTests(directory, passed);
         runMasterInsertTests(directory, passed);
         runEqualizerTests(directory, passed);
+        runNativeDynamicsTests(directory, passed);
         {
             Workstation workstation(false); workstation.stopTimer(); auto& timeline = workstation.timeline;
             workstation.engine.addTrack("Long arrangement", true);

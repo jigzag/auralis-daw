@@ -2,6 +2,7 @@
 namespace auralis {
 PluginUse describePlugin(const PluginDescription& p) {
     const auto category = p.category.toLowerCase(), name = p.name.toLowerCase(), maker = p.manufacturerName.toLowerCase();
+    if (category.contains("tuner")) return {String::fromUTF8("チューナー"), String::fromUTF8("単音の音名・音程のずれを確認")};
     if (p.isInstrument) {
         if (category.contains("drum")) return {String::fromUTF8("ドラム音源"), String::fromUTF8("MIDIでドラムを鳴らす")};
         if (category.contains("synth")) return {String::fromUTF8("シンセ音源"), String::fromUTF8("MIDIでシンセサイザーを鳴らす")};
