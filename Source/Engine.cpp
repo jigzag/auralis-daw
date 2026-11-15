@@ -1,4 +1,5 @@
 #include "Engine.h"
+#include "Equalizer.h"
 #include <cmath>
 #include <stdexcept>
 #include <lame.h>
@@ -270,7 +271,9 @@ void Engine::addPlugin(int index, const PluginDescription& description, const Me
     require(index == -1 || isPositiveAndBelow(index, int(tracks.size())), "Select a track first.");
     require(index != -1 || !description.isInstrument, "Master inserts accept audio effects only.");
     String error;
-    auto instance = pluginFormats.createPluginInstance(description, rate, block, error);
+    std::unique_ptr<AudioPluginInstance> instance;
+    if (isEqualizer(description)) instance = std::make_unique<Equalizer>();
+    else instance = pluginFormats.createPluginInstance(description, rate, block, error);
     require(instance != nullptr, "Plugin could not be opened: " + error);
     auto layout = instance->getBusesLayout();
     if (layout.outputBuses.size() > 0) layout.outputBuses.getReference(0) = AudioChannelSet::stereo();
@@ -282,6 +285,7 @@ void Engine::addPlugin(int index, const PluginDescription& description, const Me
     require(index != -1 || (instance->getTotalNumInputChannels() == 2 && instance->getTotalNumOutputChannels() == 2), "Master inserts require a stereo audio effect.");
     instance->setPlayHead(this);
     if (state && state->getSize() > 0) instance->setStateInformation(state->getData(), int(state->getSize()));
+    instance->setRateAndBufferSizeDetails(rate, block);
     instance->prepareToPlay(rate, block);
     auto insert = std::make_unique<Insert>(); insert->description = description; insert->instance = std::move(instance);
     const ScopedLock guard(lock);

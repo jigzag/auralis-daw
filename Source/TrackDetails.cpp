@@ -1,6 +1,7 @@
 #include "Interface.h"
 #include "Mixer.h"
 #include "PluginInfo.h"
+#include "Equalizer.h"
 namespace auralis {
 bool Workstation::toggleTrackExpanded(const String& id) {
     if (busy || engine.recording) return false;
@@ -43,6 +44,15 @@ bool Workstation::setTrackDetails(const String& id, const String& name, int chan
 }
 bool Workstation::trackInsertAction(const String& trackId, const String& insertId, int action) {
     if (busy || engine.recording) return false;
+    if (action == 5 && insertId.isEmpty()) {
+        int index = -1;
+        if (trackId.isNotEmpty()) { for (int i = 0; i < int(engine.tracks.size()); ++i) if (engine.tracks[size_t(i)]->id == trackId) index = i; if (index < 0) return false; }
+        try {
+            engine.addPlugin(index, equalizerDescription()); changed(); refresh();
+            const auto id = index == -1 ? engine.masterInserts.back()->id : engine.tracks[size_t(index)]->inserts.back()->id;
+            return trackInsertAction(trackId, id, 1);
+        } catch (const std::exception& e) { error(e.what()); return false; }
+    }
     if (trackId.isEmpty()) {
         for (int i = 0; i < int(engine.masterInserts.size()); ++i) if (engine.masterInserts[size_t(i)]->id == insertId) {
             auto& p = *engine.masterInserts[size_t(i)];
@@ -73,7 +83,9 @@ void Workstation::trackInsertMenu(const String& trackId, const String& insertId,
     auto types = knownPlugins.getTypes();
     if (trackId.isEmpty()) for (int i = types.size(); --i >= 0;) if (types[i].isInstrument) types.remove(i);
     if (add) {
-        menu = pluginPurposeMenu(types, 100);
+        menu.addItem(5, String::fromUTF8("内蔵 EQ（音色・周波数調整）...")); menu.addSeparator();
+        const auto scanned = pluginPurposeMenu(types, 100);
+        for (PopupMenu::MenuItemIterator item(scanned); item.next();) menu.addItem(item.getItem());
     } else { menu.addItem(1, "Open editor", insertId.isNotEmpty()); menu.addItem(2, "Toggle bypass", insertId.isNotEmpty()); menu.addItem(3, "Remove insert", insertId.isNotEmpty()); }
     menu.addSeparator(); menu.addItem(4, "Scan VST3...");
     menu.showMenuAsync(PopupMenu::Options(), [safe = Component::SafePointer<Workstation>(this), trackId, insertId, types](int choice) {
