@@ -37,13 +37,13 @@ void Workstation::newProject() {
     requestClose([safe = Component::SafePointer<Workstation>(this)] {
         if (!safe) return;
         safe->pitchWindows.clear(); safe->pianoWindows.clear(); safe->pluginWindows.clear(); safe->engine.reset(); safe->hasTimeSelection = false; safe->engine.addTrack(); safe->undo.clear(); safe->projectFile = {};
-        safe->timeline.selectedClip = -1; safe->selectTrack(0); safe->markProjectSaved(); safe->tempo.setText("120"); safe->refresh(); safe->showProjectStart(false); safe->setStatus("New project.");
+        safe->timeline.selectedClip = -1; safe->selectTrack(0); safe->markProjectSaved(); safe->tempo.setText("120"); safe->refresh(); safe->showProjectStart(false); safe->setStatus(TRANS("New project."));
     });
 }
 ProjectStartPanel::ProjectStartPanel(Workstation& w) : owner(w) {
     setComponentID("projectStart"); setWantsKeyboardFocus(true);
     addAndMakeVisible(list); list.setRowHeight(57); list.setOutlineThickness(1);
-    addAndMakeVisible(empty); empty.setText("Projects you open or save will appear here.", dontSendNotification);
+    addAndMakeVisible(empty); empty.setText(TRANS("Projects you open or save will appear here."), dontSendNotification);
     empty.setJustificationType(Justification::centred); empty.setInterceptsMouseClicks(false, false);
     empty.setColour(Label::textColourId, Colour(0xff8d9cab));
     list.setColour(ListBox::backgroundColourId, Colour(0xff151c25)); list.setColour(ListBox::outlineColourId, Colour(0xff34414e));
@@ -55,7 +55,7 @@ ProjectStartPanel::ProjectStartPanel(Workstation& w) : owner(w) {
     remove.onClick = [this] {
         int row = list.getSelectedRow(); if (!isPositiveAndBelow(row, int(owner.recentProjects.size()))) return;
         owner.recentProjects.erase(owner.recentProjects.begin() + row);
-        if (!owner.saveRecentProjects()) owner.error("The recent project list could not be saved.");
+        if (!owner.saveRecentProjects()) owner.error(TRANS("The recent project list could not be saved."));
         refresh();
     };
     openRecent.setColour(TextButton::buttonColourId, Colour(0xff337b65));
@@ -72,7 +72,7 @@ void ProjectStartPanel::selectedRowsChanged(int row) {
 void ProjectStartPanel::openSelected() {
     const int row = list.getSelectedRow(); if (!isPositiveAndBelow(row, int(owner.recentProjects.size()))) return;
     const File file = owner.recentProjects[size_t(row)];
-    if (!file.existsAsFile()) { refresh(); owner.error("This project was moved or deleted. Use Open project to locate it."); return; }
+    if (!file.existsAsFile()) { refresh(); owner.error(TRANS("This project was moved or deleted. Use Open project to locate it.")); return; }
     owner.openSelectedProject(file);
 }
 void ProjectStartPanel::listBoxItemDoubleClicked(int row, const MouseEvent&) { list.selectRow(row); openSelected(); }
@@ -87,7 +87,7 @@ void ProjectStartPanel::paintListBoxItem(int row, Graphics& g, int width, int he
     g.fillAll(Colour(selected ? 0xff294338 : 0xff151c25));
     g.setColour(Colour(exists ? 0xff80e3c0 : 0xffa16a70)); g.fillRoundedRectangle(12, 13, 4, float(height - 26), 2);
     g.setColour(Colour(exists ? 0xffe2e9ee : 0xffa6a9ae)); g.setFont(15);
-    g.drawText(file.getFileNameWithoutExtension() + (exists ? "" : "  (not found)"), 27, 5, width - 42, 25, Justification::centredLeft);
+    g.drawText(file.getFileNameWithoutExtension() + (exists ? "" : TRANS("  (not found)")), 27, 5, width - 42, 25, Justification::centredLeft);
     g.setColour(Colour(0xff8d9cab)); g.setFont(11); g.drawText(file.getFullPathName(), 27, 30, width - 42, 20, Justification::centredLeft);
 }
 void ProjectStartPanel::resized() {
@@ -104,7 +104,7 @@ void ProjectStartPanel::paint(Graphics& g) {
     g.setColour(Colour(0xff1a2029)); g.fillRoundedRectangle(card.toFloat(), 12);
     const int x = card.getX() + 30;
     g.setColour(Colour(0xff80e3c0)); g.setFont(28); g.drawText("AURALIS", x, card.getY() + 21, 300, 37, Justification::centredLeft);
-    g.setColour(Colour(0xffe2e9ee)); g.setFont(15); g.drawText("Start a project or pick up where you left off", x, card.getY() + 62, 700, 25, Justification::centredLeft);
-    g.setColour(Colour(0xff8d9cab)); g.setFont(11); g.drawText("RECENT PROJECTS  /  Double-click or select and press Open", x, card.getY() + 158, 710, 25, Justification::centredLeft);
+    g.setColour(Colour(0xffe2e9ee)); g.setFont(15); g.drawText(TRANS("Start a project or pick up where you left off"), x, card.getY() + 62, 700, 25, Justification::centredLeft);
+    g.setColour(Colour(0xff8d9cab)); g.setFont(11); g.drawText(TRANS("RECENT PROJECTS  /  Double-click or select and press Open"), x, card.getY() + 158, 710, 25, Justification::centredLeft);
 }
 }

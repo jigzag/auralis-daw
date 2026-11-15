@@ -9,6 +9,19 @@
 
 namespace auralis {
 using namespace juce;
+int64 projectAudioBudgetForMemory(int64 physicalBytes, int64 availableBytes) {
+    if (physicalBytes <= 0 || availableBytes <= 0) return 0;
+    return jmin(ProjectLimits::maximumAudioBytes, physicalBytes / 4, availableBytes / 2);
+}
+int64 currentProjectAudioBudget() {
+   #if JUCE_WINDOWS
+    MEMORYSTATUSEX status {}; status.dwLength = sizeof(status);
+    if (GlobalMemoryStatusEx(&status)) return projectAudioBudgetForMemory(int64(status.ullTotalPhys), int64(jmin(status.ullAvailPhys, status.ullAvailPageFile)));
+   #endif
+    const auto physical = int64(SystemStats::getMemorySizeInMegabytes()) * 1024 * 1024;
+    // If available/committable memory cannot be queried, remain conservative.
+    return jmin<int64>(512LL * 1024 * 1024, jmax<int64>(0, physical / 4));
+}
 namespace {
 void demand(bool ok, const String& message) { if (!ok) throw std::runtime_error(message.toStdString()); }
 bool numeric(const var& v) { return v.isInt() || v.isInt64() || v.isDouble(); }

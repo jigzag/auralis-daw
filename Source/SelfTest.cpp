@@ -1,4 +1,5 @@
 #include "Interface.h"
+#include "Japanese.h"
 #include <cmath>
 #include <stdexcept>
 
@@ -8,6 +9,7 @@ int runSelfTests(const File& directory) {
     auto check = [&](bool ok, String name) { if (!ok) throw std::runtime_error(name.toStdString()); passed.add("PASS " + name); };
     directory.createDirectory();
     try {
+        runJapaneseTests(directory, passed);
         File source = directory.getChildFile("source.wav");
         {
             WavAudioFormat wav; auto stream = source.createOutputStream(); stream->setPosition(0); stream->truncate();
@@ -238,7 +240,7 @@ int runSelfTests(const File& directory) {
         }
         passed.add("ALL TESTS PASSED"); directory.getChildFile("results.txt").replaceWithText(passed.joinIntoString("\n")); return 0;
     } catch (const std::exception& e) {
-        passed.add("FAIL " + String(e.what())); directory.getChildFile("results.txt").replaceWithText(passed.joinIntoString("\n")); return 1;
+        passed.add("FAIL " + String::fromUTF8(e.what())); directory.getChildFile("results.txt").replaceWithText(passed.joinIntoString("\n")); return 1;
     }
 }
 }

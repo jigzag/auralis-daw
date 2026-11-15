@@ -53,7 +53,7 @@ void runClipGainTests(const File& directory, StringArray& passed) {
     workstation.setClipGain(trackId, firstId, 0); check(approx(clips[0].gainDb, 0), "Part volume can reset to original 0 dB");
     auto dismiss = [&](String button, String value) {
         auto* prompt = workstation.clipGainPrompt.getComponent(); check(prompt != nullptr, "Part volume numeric dialog opens for its target");
-        prompt->setAlpha(0); prompt->getTextEditor("gain")->setText(value, false); prompt->triggerButtonClick(button); pump();
+        prompt->setAlpha(0); prompt->getTextEditor("gain")->setText(value, false); prompt->triggerButtonClick(TRANS(button)); pump();
     };
     workstation.showClipGainDialog(trackId, firstId); dismiss("Apply", "-6.5");
     check(approx(clips[0].gainDb, -6.5) && approx(clips[1].gainDb, 0), "Numeric Apply sets the exact target part volume in dB");

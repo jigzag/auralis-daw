@@ -52,7 +52,7 @@ bool Workstation::trackInsertAction(const String& trackId, const String& insertI
             engine.addPlugin(index, nativeDescription(kind)); changed(); refresh();
             const auto id = index == -1 ? engine.masterInserts.back()->id : engine.tracks[size_t(index)]->inserts.back()->id;
             return trackInsertAction(trackId, id, 1);
-        } catch (const std::exception& e) { error(e.what()); return false; }
+        } catch (const std::exception& e) { error(String::fromUTF8(e.what())); return false; }
     }
     if (trackId.isEmpty()) {
         for (int i = 0; i < int(engine.masterInserts.size()); ++i) if (engine.masterInserts[size_t(i)]->id == insertId) {
@@ -91,8 +91,8 @@ void Workstation::trackInsertMenu(const String& trackId, const String& insertId,
         menu.addItem(9, String::fromUTF8("内蔵ディレイ（反復・やまびこ）...")); menu.addSeparator();
         const auto scanned = pluginPurposeMenu(types, 100);
         for (PopupMenu::MenuItemIterator item(scanned); item.next();) menu.addItem(item.getItem());
-    } else { menu.addItem(1, "Open editor", insertId.isNotEmpty()); menu.addItem(2, "Toggle bypass", insertId.isNotEmpty()); menu.addItem(3, "Remove insert", insertId.isNotEmpty()); }
-    menu.addSeparator(); menu.addItem(4, "Scan VST3...");
+    } else { menu.addItem(1, TRANS("Open editor"), insertId.isNotEmpty()); menu.addItem(2, TRANS("Toggle bypass"), insertId.isNotEmpty()); menu.addItem(3, TRANS("Remove insert"), insertId.isNotEmpty()); }
+    menu.addSeparator(); menu.addItem(4, TRANS("Scan VST3..."));
     menu.showMenuAsync(PopupMenu::Options(), [safe = Component::SafePointer<Workstation>(this), trackId, insertId, types](int choice) {
         if (!safe || safe->busy || safe->engine.recording || choice == 0) return;
         if (choice == 4) { safe->scanPlugins(); return; }
@@ -100,12 +100,12 @@ void Workstation::trackInsertMenu(const String& trackId, const String& insertId,
         if (!isPositiveAndBelow(choice - 100, types.size())) return;
         if (trackId.isEmpty()) {
             try { safe->engine.addPlugin(-1, types[choice - 100]); safe->changed(); safe->refresh(); safe->trackInsertAction({}, safe->engine.masterInserts.back()->id, 1); }
-            catch (const std::exception& e) { safe->error(e.what()); } return;
+            catch (const std::exception& e) { safe->error(String::fromUTF8(e.what())); } return;
         }
         for (int i = 0; i < int(safe->engine.tracks.size()); ++i) if (safe->engine.tracks[size_t(i)]->id == trackId) {
             try { safe->engine.addPlugin(i, types[choice - 100]); safe->changed(); safe->refresh();
                 safe->trackInsertAction(trackId, safe->engine.tracks[size_t(i)]->inserts.back()->id, 1); }
-            catch (const std::exception& e) { safe->error(e.what()); } return;
+            catch (const std::exception& e) { safe->error(String::fromUTF8(e.what())); } return;
         }
     });
 }

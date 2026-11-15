@@ -18,7 +18,7 @@ private:
     String detail;
     float peak = 0;
     bool selected = false;
-    TextButton add {"+ Add"}, more {"..."};
+    TextButton add {TRANS("+ Add")}, more {"..."};
     ListBox inserts {"Master inserts", this};
     int getNumRows() override;
     void paintListBoxItem(int, Graphics&, int, int, bool) override;

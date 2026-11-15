@@ -1,4 +1,5 @@
 #include "Interface.h"
+#include "Japanese.h"
 
 namespace auralis {
 class AuralisApplication : public JUCEApplication {
@@ -7,6 +8,7 @@ public:
     const String getApplicationVersion() override { return ProjectInfo::versionString; }
     bool moreThanOneInstanceAllowed() override { return true; }
     void initialise(const String& commandLine) override {
+        initialiseJapanese();
         auto args = StringArray::fromTokens(commandLine, true); args.removeEmptyStrings();
         for (auto& arg : args) arg = arg.unquoted();
         if (args.contains("--scan-plugin")) {
@@ -51,7 +53,7 @@ private:
     class Window : public DocumentWindow {
     public:
         Workstation* workstation = nullptr;
-        Window(AuralisApplication& a) : DocumentWindow("Auralis — Audio Workstation", Colour(0xff11151b), allButtons), app(a) {
+        Window(AuralisApplication& a) : DocumentWindow(TRANS("Auralis — Audio Workstation"), Colour(0xff11151b), allButtons), app(a) {
             setUsingNativeTitleBar(true); workstation = new Workstation(); setContentOwned(workstation, true);
             setResizable(true, false); setResizeLimits(1280, 820, 3840, 2160); centreWithSize(1400, 880); setVisible(true);
         }

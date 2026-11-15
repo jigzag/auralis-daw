@@ -8,6 +8,21 @@
 
 namespace auralis {
 namespace {
+class BudgetFixtureReader final : public AudioFormatReader {
+public:
+    explicit BudgetFixtureReader(InputStream* stream) : AudioFormatReader(stream, "Budget fixture") { sampleRate = 48000; numChannels = 2; bitsPerSample = 32; usesFloatingPointData = true; lengthInSamples = 48000000; }
+    bool readSamples(int* const* channels, int count, int offset, int64, int samples) override { for (int ch = 0; ch < count; ++ch) if (channels[ch]) zeromem(channels[ch] + offset, size_t(samples) * sizeof(int)); return true; }
+};
+class BudgetFixtureFormat final : public AudioFormat {
+public:
+    BudgetFixtureFormat() : AudioFormat("Budget fixture", ".budgetfixture") {}
+    Array<int> getPossibleSampleRates() override { return {48000}; }
+    Array<int> getPossibleBitDepths() override { return {32}; }
+    bool canDoStereo() override { return true; }
+    bool canDoMono() override { return true; }
+    AudioFormatReader* createReaderFor(InputStream* stream, bool) override { return new BudgetFixtureReader(stream); }
+    AudioFormatWriter* createWriterFor(OutputStream*, double, unsigned int, int, const StringPairArray&, int) override { return nullptr; }
+};
 var obj(std::initializer_list<std::pair<const char*, var>> properties) { auto* result = new DynamicObject(); for (const auto& p : properties) result->setProperty(p.first, p.second); return var(result); }
 var array(std::initializer_list<var> values) { Array<var> result; for (const auto& v : values) result.add(v); return var(result); }
 void prop(var& v, const char* name, const var& value) { v.getDynamicObject()->setProperty(name, value); }
@@ -44,8 +59,14 @@ void runProjectSafetyTests(const File& directory, StringArray& passed) {
     const auto folder = directory.getChildFile("Safety"); folder.createDirectory(); const auto file = folder.getChildFile("checked.auralis");
     auto write = [&](const var& root) { if (!file.replaceWithText(JSON::toString(root))) throw std::runtime_error("Cannot write safety fixture"); };
     Engine survivor; survivor.addTrack("Survivor"); const auto survivorId = survivor.tracks[0]->id;
+    constexpr int64 GiB = 1024LL * 1024 * 1024;
+    check(projectAudioBudgetForMemory(48 * GiB, 24 * GiB) >= 12 * GiB, "A 48 GiB computer can load ordinary multitrack projects beyond the former one-GiB limit");
+    check(projectAudioBudgetForMemory(8 * GiB, 6 * GiB) == 2 * GiB, "Project audio budgets reserve three quarters of installed memory for the OS and other work");
+    check(projectAudioBudgetForMemory(48 * GiB, 256 * 1024 * 1024) == 128 * 1024 * 1024, "Low available memory reduces the project budget instead of forcing a one-GiB allocation");
+    check(projectAudioBudgetForMemory(128 * GiB, 96 * GiB) == ProjectLimits::maximumAudioBytes && projectAudioBudgetForMemory(48 * GiB, 0) == 0, "Audio budgets retain a finite hard ceiling and reject allocation when no memory is available");
+    check(currentProjectAudioBudget() >= 0 && currentProjectAudioBudget() <= ProjectLimits::maximumAudioBytes, "Runtime audio budgets use bounded local memory information without opening audio devices");
     auto rejects = [&](const var& root, const String& expected) {
-        write(root); String message; try { survivor.loadProject(file, {true, true}); } catch (const std::exception& e) { message = e.what(); }
+        write(root); String message; try { survivor.loadProject(file, {true, true}); } catch (const std::exception& e) { message = String::fromUTF8(e.what()); }
         return message.containsIgnoreCase(expected) && survivor.tracks.size() == 1 && survivor.tracks[0]->id == survivorId;
     };
     write(project()); const auto safe = ProjectDocument::read(file); check(safe->pluginsToApprove().isEmpty() && safe->mediaToApprove().isEmpty(), "Ordinary local projects need no extra approval");
@@ -58,12 +79,12 @@ void runProjectSafetyTests(const File& directory, StringArray& passed) {
     auto mediaProject = project(); prop(row(mediaProject), "clips", array({clip("local.wav")})); write(mediaProject); const auto contained = ProjectDocument::read(file); Engine loaded; loaded.loadProject(*contained);
     check(contained->mediaToApprove().isEmpty() && loaded.tracks[0]->clips[0].source->samples.getSample(0, 0) == 0.25f, "Contained media loads normally without granting external file access");
     prop(row(mediaProject), "clips", array({clip("../outside-safety.wav")})); write(mediaProject); const auto external = ProjectDocument::read(file); bool blocked = false;
-    try { survivor.loadProject(*external); } catch (const std::exception& e) { blocked = String(e.what()).containsIgnoreCase("approval"); }
+    try { survivor.loadProject(*external); } catch (const std::exception& e) { blocked = String::fromUTF8(e.what()).containsIgnoreCase("approval"); }
     check(blocked && external->mediaToApprove().contains(outside.getFullPathName()) && survivor.tracks[0]->id == survivorId, "Parent traversal becomes an explicit external-media request before file decoding");
     loaded.loadProject(*external, {false, true}); check(loaded.tracks[0]->clips[0].source->file == outside, "Explicitly approved external local media remains compatible");
     const auto migrated = folder.getChildFile("contained-save.auralis"); loaded.saveProject(migrated); check(ProjectDocument::read(migrated)->mediaToApprove().isEmpty(), "Saving copies approved external media into the project media folder");
     const StringArray paths {"\\\\blocked.invalid\\share\\audio.wav", "//blocked.invalid/share/audio.wav", "\\\\?\\C:\\audio.wav", "\\\\.\\pipe\\audio.wav", "C:audio.wav", "local.wav:alternate", "\\rooted.wav", "NUL.wav", "COM1.txt", "LPT1", "local.wav.", "local.wav "};
-    for (const auto& path : paths) { auto root = project(); prop(row(root), "clips", array({clip(path)})); String message; write(root); try { auto document = ProjectDocument::read(file); survivor.loadProject(*document, {true, true}); } catch (const std::exception& e) { message = e.what(); }
+    for (const auto& path : paths) { auto root = project(); prop(row(root), "clips", array({clip(path)})); String message; write(root); try { auto document = ProjectDocument::read(file); survivor.loadProject(*document, {true, true}); } catch (const std::exception& e) { message = String::fromUTF8(e.what()); }
         check(message.isNotEmpty() && survivor.tracks[0]->id == survivorId, "Unsafe media path is blocked without network/device access: " + path); }
     auto pitch = project(); auto part = clip("local.wav"); prop(part, "pitchCorrection", obj({{"originalFile", "\\\\blocked.invalid\\share\\original.wav"}})); prop(row(pitch), "clips", array({part})); check(rejects(pitch, "blocked"), "Pitch original-file paths cannot bypass the media path policy");
     OwnedArray<PluginDescription> descriptions; const auto fixture = File::getSpecialLocation(File::currentExecutableFile).getSiblingFile("TestGain.vst3");
@@ -71,7 +92,7 @@ void runProjectSafetyTests(const File& directory, StringArray& passed) {
     for (auto* format : loaded.pluginFormats.getFormats()) format->findAllTypesForFile(descriptions, fixture.getFullPathName()); check(descriptions.size() == 1, "Safety tests use a known local TestGain fixture");
     auto plugin = [&](const PluginDescription& desc, const String& state = "0.") { return obj({{"xml", desc.createXml()->toString()}, {"state", state}, {"bypass", true}}); };
     auto pluginProject = project("Approved fixture"); prop(row(pluginProject), "plugins", array({plugin(*descriptions[0])})); write(pluginProject); const auto untrusted = ProjectDocument::read(file); blocked = false;
-    try { survivor.loadProject(*untrusted); } catch (const std::exception& e) { blocked = String(e.what()).containsIgnoreCase("approval"); }
+    try { survivor.loadProject(*untrusted); } catch (const std::exception& e) { blocked = String::fromUTF8(e.what()).containsIgnoreCase("approval"); }
     check(blocked && untrusted->pluginsToApprove().size() == 1 && survivor.tracks[0]->id == survivorId, "Even bypassed external VSTs are denied by default before processor creation");
     loaded.loadProject(*untrusted, {true, false}); check(loaded.tracks[0]->inserts.size() == 1 && loaded.tracks[0]->inserts[0]->bypass, "Explicit approval restores external VST state and insert bypass");
     auto master = project(); prop(master, "masterPlugins", array({plugin(*descriptions[0])})); write(master); const auto masterDocument = ProjectDocument::read(file); blocked = false;
@@ -92,31 +113,40 @@ void runProjectSafetyTests(const File& directory, StringArray& passed) {
     many = project(); prop(row(many), "height", 1e100); check(rejects(many, "number"), "Oversized track dimensions are rejected before integer casts");
     MemoryBlock badMidi; const uint8 status = 0xb0; badMidi.append(&status, 1); many = project(); part = obj({{"midi", true}, {"length", 4}, {"events", array({obj({{"beat", 0}, {"data", badMidi.toBase64Encoding()}})})}}); prop(row(many), "midi", true); prop(row(many), "clips", array({part})); check(rejects(many, "MIDI"), "Truncated MIDI messages are rejected before MidiMessage construction");
     const auto nested = String("{\"format\":\"auralis-1\",\"tracks\":[],\"deep\":") + String::repeatedString("[", 60) + "0" + String::repeatedString("]", 60) + "}"; file.replaceWithText(nested); blocked = false;
-    try { ProjectDocument::read(file); } catch (const std::exception& e) { blocked = String(e.what()).containsIgnoreCase("nesting"); } check(blocked, "JSON nesting is limited before invoking the recursive JSON parser");
+    try { ProjectDocument::read(file); } catch (const std::exception& e) { blocked = String::fromUTF8(e.what()).containsIgnoreCase("nesting"); } check(blocked, "JSON nesting is limited before invoking the recursive JSON parser");
     file.replaceWithText("[" + String::repeatedString("0,", ProjectLimits::jsonTokens + 1) + "0]"); blocked = false;
-    try { ProjectDocument::read(file); } catch (const std::exception& e) { blocked = String(e.what()).contains("too many entries"); } check(blocked, "JSON token budgets are enforced before allocating the parsed tree");
+    try { ProjectDocument::read(file); } catch (const std::exception& e) { blocked = String::fromUTF8(e.what()).contains("too many entries"); } check(blocked, "JSON token budgets are enforced before allocating the parsed tree");
     { auto stream = file.createOutputStream(); stream->setPosition(ProjectLimits::jsonBytes); stream->writeByte('x'); stream->truncate(); } blocked = false;
-    try { ProjectDocument::read(file); } catch (const std::exception& e) { blocked = String(e.what()).contains("32 MiB"); } check(blocked, "Oversized project files are rejected before reading their contents");
+    try { ProjectDocument::read(file); } catch (const std::exception& e) { blocked = String::fromUTF8(e.what()).contains("32 MiB"); } check(blocked, "Oversized project files are rejected before reading their contents");
     int64 budget = 2 * 1024 * 4 + ((1024 + 63) / 64) * 8 + 4096; const auto cost = budget; auto audio = loaded.readAudio(local, &budget); blocked = false;
-    try { loaded.readAudio(outside, &budget); } catch (const std::exception& e) { blocked = String(e.what()).contains("memory budget"); }
+    try { loaded.readAudio(outside, &budget); } catch (const std::exception& e) { blocked = String::fromUTF8(e.what()).contains(String::fromUTF8("メモリ")) && String::fromUTF8(e.what()).contains("MiB"); }
     check(audio && budget == 0 && cost < 20000 && blocked, "Decoded audio and waveform allocations share an aggregate budget checked before buffer allocation");
+    if (currentProjectAudioBudget() >= 2 * GiB) {
+        // Generate decoded silence through a test-only reader: three one-byte
+        // fixture files exercise a >1 GiB real project load without huge disk files.
+        Engine large; large.formats.registerFormat(new BudgetFixtureFormat(), false); auto root = project("Large synthetic session"); Array<var> parts;
+        for (int i = 0; i < 3; ++i) { const String name = "source-" + String(i) + ".budgetfixture"; folder.getChildFile(name).replaceWithText("x"); parts.add(clip(name)); }
+        prop(row(root), "clips", var(parts)); write(root); large.loadProject(file);
+        int64 decoded = 0; for (const auto& part : large.tracks[0]->clips) decoded += int64(part.source->samples.getNumSamples()) * part.source->samples.getNumChannels() * int64(sizeof(float));
+        check(large.tracks[0]->clips.size() == 3 && decoded > GiB && !large.devices.getCurrentAudioDevice(), "A real offline project exceeding one GiB opens with the memory-aware budget and no audio hardware");
+    }
    #if JUCE_WINDOWS
     const auto link = folder.getChildFile("linked-media"); check(link.isAChildOf(folder) && junction(link, directory), "Local junction fixture is created without following a remote target");
     auto linked = project(); prop(row(linked), "clips", array({clip("linked-media/outside-safety.wav")})); check(rejects(linked, "reparse"), "A contained path through a junction cannot bypass the external-media boundary");
     check(RemoveDirectoryW(link.getFullPathName().toWideCharPointer()) != 0, "Junction cleanup removes only the link and keeps its target intact");
     const auto bundle = folder.getChildFile("linked.vst3"); bundle.createDirectory(); const auto bundleLink = bundle.getChildFile("Contents"); check(junction(bundleLink, directory), "VST bundle junction fixture is created locally");
-    auto linkedDescription = *descriptions[0]; linkedDescription.fileOrIdentifier = bundle.getFullPathName(); blocked = false; try { validateProjectPluginPath(linkedDescription); } catch (const std::exception& e) { blocked = String(e.what()).containsIgnoreCase("reparse"); }
+    auto linkedDescription = *descriptions[0]; linkedDescription.fileOrIdentifier = bundle.getFullPathName(); blocked = false; try { validateProjectPluginPath(linkedDescription); } catch (const std::exception& e) { blocked = String::fromUTF8(e.what()).containsIgnoreCase("reparse"); }
     check(blocked, "VST bundle traversal rejects junctions before JUCE's recursive module search"); check(RemoveDirectoryW(bundleLink.getFullPathName().toWideCharPointer()) != 0, "VST bundle junction cleanup preserves the target directory");
    #endif
     Workstation w(false); w.stopTimer(); w.engine.tracks[0]->name = "Current session"; const auto originalId = w.engine.tracks[0]->id;
     write(pluginProject); w.loadProjectFile(file); auto* prompt = w.projectTrustPrompt.getComponent(); check(prompt && prompt->isCurrentlyModal() && w.engine.tracks[0]->id == originalId && w.engine.tracks[0]->inserts.empty(), "The project trust dialog appears before any external plugin is loaded"); prompt->setAlpha(0); pump();
     auto* requirements = dynamic_cast<TextEditor*>(prompt->findChildWithID("projectRequirements")); check(requirements && requirements->isReadOnly() && requirements->getPasswordCharacter() == 0 && requirements->isMultiLine() && requirements->getHeight() >= 160 && requirements->getText().contains(fixture.getFullPathName()), "The trust dialog displays the unmasked plugin path in a multiline read-only list");
     if (auto stream = directory.getChildFile("project-trust-preview.png").createOutputStream()) { stream->setPosition(0); stream->truncate(); PNGImageFormat().writeImageToStream(prompt->createComponentSnapshot(prompt->getLocalBounds()), *stream); }
-    prompt->triggerButtonClick(String::fromUTF8("キャンセル")); pump(); check(!w.projectTrustPrompt && w.engine.tracks[0]->id == originalId && w.projectFile == File(), "Cancelling trust approval preserves the current session and selected project");
+    prompt->triggerButtonClick(TRANS(String::fromUTF8("キャンセル"))); pump(); check(!w.projectTrustPrompt && w.engine.tracks[0]->id == originalId && w.projectFile == File(), "Cancelling trust approval preserves the current session and selected project");
     // Changing the file while the dialog is open must not replace the approved snapshot.
-    write(pluginProject); w.loadProjectFile(file); prompt = w.projectTrustPrompt.getComponent(); prompt->setAlpha(0); write(remote); prompt->triggerButtonClick(String::fromUTF8("許可して開く")); pump();
+    write(pluginProject); w.loadProjectFile(file); prompt = w.projectTrustPrompt.getComponent(); prompt->setAlpha(0); write(remote); prompt->triggerButtonClick(TRANS(String::fromUTF8("許可して開く"))); pump();
     check(!w.projectTrustPrompt && w.engine.tracks[0]->name == "Approved fixture" && w.engine.tracks[0]->inserts.size() == 1, "Approval loads the inspected snapshot even if the on-disk project is replaced while prompting");
-    write(mediaProject); w.loadProjectFile(file); prompt = w.projectTrustPrompt.getComponent(); requirements = prompt ? dynamic_cast<TextEditor*>(prompt->findChildWithID("projectRequirements")) : nullptr; check(requirements && requirements->getText().contains(outside.getFullPathName()), "External-media approval shows the resolved absolute path"); prompt->setAlpha(0); prompt->triggerButtonClick(String::fromUTF8("許可して開く")); pump();
+    write(mediaProject); w.loadProjectFile(file); prompt = w.projectTrustPrompt.getComponent(); requirements = prompt ? dynamic_cast<TextEditor*>(prompt->findChildWithID("projectRequirements")) : nullptr; check(requirements && requirements->getText().contains(outside.getFullPathName()), "External-media approval shows the resolved absolute path"); prompt->setAlpha(0); prompt->triggerButtonClick(TRANS(String::fromUTF8("許可して開く"))); pump();
     check(!w.projectTrustPrompt && w.engine.tracks[0]->clips.size() == 1 && w.engine.tracks[0]->clips[0].source->file == outside, "Explicit media approval opens the intended external local file");
     check(!survivor.devices.getCurrentAudioDevice() && !loaded.devices.getCurrentAudioDevice() && !w.engine.devices.getCurrentAudioDevice(), "Security tests never open hardware or access a remote share");
     directory.getChildFile("project-safety-verification.txt").replaceWithText("Offline/local fixtures only. Default-deny track/master VST loading, bypass does not grant execution, explicit UI approval and cancellation, immutable inspected snapshot, built-in compatibility, external-media approval/copy-on-save, UNC/device/ADS/reserved-path blocking, native and VST-bundle junction rejection, bounded JSON bytes/depth/counts, validated size-prefixed state decoding, native-state JSON nesting, MIDI message bounds, finite numeric ranges, aggregate decoded audio/waveform budget, atomic session preservation. No malicious plugin or remote share executed.\n");

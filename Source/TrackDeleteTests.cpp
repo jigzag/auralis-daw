@@ -36,7 +36,7 @@ void runTrackDeleteTests(const File& directory, StringArray& passed) {
     check(workstation.trackMenuTarget == second && !engine.tracks[1]->mute && !mute->getToggleState(), "Right-clicking MUTE opens the menu without changing mute state"); closeMenu();
     auto dismiss = [&](String label) {
         auto* prompt = workstation.trackRemovalPrompt.getComponent(); check(prompt && prompt->isCurrentlyModal(), "Track removal requires confirmation");
-        prompt->setAlpha(0); prompt->triggerButtonClick(label); pump();
+        prompt->setAlpha(0); prompt->triggerButtonClick(TRANS(label)); pump();
     };
     workstation.confirmRemoveTrack(second); dismiss("Cancel");
     check(engine.tracks.size() == 2 && !workstation.dirty, "Cancelling track removal preserves all tracks and project state");

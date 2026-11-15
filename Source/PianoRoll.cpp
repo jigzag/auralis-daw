@@ -58,7 +58,7 @@ void PianoRoll::mouseWheelMove(const MouseEvent& event, const MouseWheelDetails&
 void PianoRoll::paint(Graphics& g) {
     g.fillAll(bg); if (!owner) return;
     auto* c = resolve(); // Drawing reads metadata and atomic transport values only.
-    if (!c) { g.setColour(ink); g.drawText("This clip is no longer in the project.", getLocalBounds(), Justification::centred); return; }
+    if (!c) { g.setColour(ink); g.drawText(TRANS("This clip is no longer in the project."), getLocalBounds(), Justification::centred); return; }
     for (int pitch = 0; pitch < 128; ++pitch) {
         int y = top + (127 - pitch) * rowHeight; bool black = MidiMessage::isMidiNoteBlack(pitch);
         g.setColour(black ? Colour(0xff141a22) : Colour(0xff1b222c)); g.fillRect(keyWidth, y, getWidth() - keyWidth, rowHeight - 1);
@@ -244,7 +244,7 @@ void PianoRoll::timerCallback() {
 PianoRollPanel::PianoRollPanel(Workstation& w, String track, String clip) : roll(w, track, clip) {
     viewport.setViewedComponent(&roll, false); addAndMakeVisible(viewport);
     for (auto* c : std::initializer_list<Component*>{&grid, &channel, &velocity, &quantize, &play}) addAndMakeVisible(c);
-    grid.addItemList({"1/4", "1/8", "1/16", "1/32", "1/8 triplet", "Free"}, 1); grid.setSelectedId(3);
+    grid.addItemList({"1/4", "1/8", "1/16", "1/32", TRANS("1/8 triplet"), TRANS("Free")}, 1); grid.setSelectedId(3);
     grid.onChange = [this] { static const double steps[] = {1, 0.5, 0.25, 0.125, 1.0 / 3.0, 0}; roll.grid = steps[jlimit(0, 5, grid.getSelectedItemIndex())]; roll.repaint(); };
     channel.addItemList({"Ch 1", "Ch 2", "Ch 3", "Ch 4", "Ch 5", "Ch 6", "Ch 7", "Ch 8", "Ch 9", "Ch 10", "Ch 11", "Ch 12", "Ch 13", "Ch 14", "Ch 15", "Ch 16"}, 1); channel.setSelectedId(1);
     channel.onChange = [this] { roll.setChannel(channel.getSelectedId()); };
@@ -260,7 +260,7 @@ void PianoRollPanel::resized() {
     viewport.setBounds(0, 84, getWidth(), getHeight() - 114);
 }
 void PianoRollPanel::paint(Graphics& g) {
-    g.fillAll(bg); g.setColour(ink); g.setFont(12); g.drawText("Grid", 140, 12, 36, 30, Justification::centredLeft); g.drawText("Velocity", 548, 12, 66, 30, Justification::centredLeft);
+    g.fillAll(bg); g.setColour(ink); g.setFont(12); g.drawText(TRANS("Grid"), 140, 12, 36, 30, Justification::centredLeft); g.drawText(TRANS("Velocity"), 548, 12, 66, 30, Justification::centredLeft);
     g.setColour(Colour(0xff1b222c)); g.fillRect(0, 56, getWidth(), 28);
     int step = 1, labelStep = 4;
     while (step * roll.pixels < 12) step *= 2;
@@ -277,7 +277,7 @@ void PianoRollPanel::paint(Graphics& g) {
         g.setColour(accent); g.drawVerticalLine(playhead, 56, 84); Path marker;
         marker.addTriangle(float(playhead - 5), 57, float(playhead + 5), 57, float(playhead), 66); g.fillPath(marker);
     }
-    g.setColour(ink.withAlpha(0.75f)); g.setFont(11); g.drawText("Ctrl+wheel: zoom  |  F: fit clip  |  Ruler: seek  |  Drag empty: select  |  Drag notes: move  |  Delete: remove  |  Ctrl+D: repeat", 14, getHeight() - 28, getWidth() - 28, 24, Justification::centredLeft);
+    g.setColour(ink.withAlpha(0.75f)); g.setFont(11); g.drawText(TRANS("Ctrl+wheel: zoom  |  F: fit clip  |  Ruler: seek  |  Drag empty: select  |  Drag notes: move  |  Delete: remove  |  Ctrl+D: repeat"), 14, getHeight() - 28, getWidth() - 28, 24, Justification::centredLeft);
     double percent = roll.pixels * 100 / 78;
     g.setColour(accent); g.drawText(String(roll.getNumSelectedNotes()) + " selected  /  " + String(percent, percent < 10 ? 1 : 0) + "%", 830, 12, jmax(0, getWidth() - 842), 30, Justification::centredLeft);
 }
@@ -301,7 +301,7 @@ void PianoRollPanel::mouseWheelMove(const MouseEvent& event, const MouseWheelDet
     if (event.mods.isCommandDown()) { roll.mouseWheelMove(event.getEventRelativeTo(&roll), wheel); return; }
     Component::mouseWheelMove(event, wheel);
 }
-PianoRollWindow::PianoRollWindow(Workstation& w, String track, String clip) : DocumentWindow("Piano roll", bg, allButtons), clipId(clip) {
+PianoRollWindow::PianoRollWindow(Workstation& w, String track, String clip) : DocumentWindow(TRANS("Piano roll"), bg, allButtons), clipId(clip) {
     setLookAndFeel(&w.getLookAndFeel()); setUsingNativeTitleBar(true); setContentOwned(new PianoRollPanel(w, track, clip), true); setResizable(true, false); setResizeLimits(850, 450, 2400, 1600); centreWithSize(1080, 650); setVisible(true);
 }
 void Workstation::showPianoRoll(int track, int index) {
@@ -314,8 +314,8 @@ void Workstation::showPianoRoll(int track, int index) {
 Image Workstation::pianoRollPreview() { return pianoWindows.empty() ? Image() : pianoWindows.back()->createComponentSnapshot(pianoWindows.back()->getLocalBounds()); }
 void Workstation::exportMidiFile() {
     if (engine.recording) return;
-    chooser = std::make_unique<FileChooser>("Export standard MIDI file", File::getSpecialLocation(File::userDocumentsDirectory).getChildFile("Session.mid"), "*.mid");
+    chooser = std::make_unique<FileChooser>(TRANS("Export standard MIDI file"), File::getSpecialLocation(File::userDocumentsDirectory).getChildFile("Session.mid"), "*.mid");
     chooser->launchAsync(FileBrowserComponent::saveMode | FileBrowserComponent::canSelectFiles | FileBrowserComponent::warnAboutOverwriting,
-        [safe = Component::SafePointer<Workstation>(this)](const FileChooser& c) { if (!safe || c.getResult() == File()) return; try { safe->engine.exportMidi(c.getResult().withFileExtension("mid")); safe->setStatus("Exported MIDI file."); } catch (const std::exception& e) { safe->error(e.what()); } });
+        [safe = Component::SafePointer<Workstation>(this)](const FileChooser& c) { if (!safe || c.getResult() == File()) return; try { safe->engine.exportMidi(c.getResult().withFileExtension("mid")); safe->setStatus(TRANS("Exported MIDI file.")); } catch (const std::exception& e) { safe->error(String::fromUTF8(e.what())); } });
 }
 }

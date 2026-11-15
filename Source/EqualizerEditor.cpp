@@ -5,7 +5,7 @@ namespace auralis {
 namespace {
 const Colour bg(0xff11151b), ink(0xffe2e9ee), dim(0xff8d9cab);
 const std::array<Colour, 4> colours {Colour(0xff80e3c0), Colour(0xffffbd79), Colour(0xff80b8f5), Colour(0xffc5a0f4)};
-const StringArray types {"Bell", "Low shelf", "High shelf", "Low cut", "High cut"};
+const StringArray types {TRANS("Bell"), TRANS("Low shelf"), TRANS("High shelf"), TRANS("Low cut"), TRANS("High cut")};
 
 class EqGraph : public Component, public SettableTooltipClient {
 public:
@@ -130,7 +130,7 @@ private:
         value(frequency, jmin(double(b.frequency), maximum)); value(gain, b.gain); value(q, b.q); value(output, eq.outputDb()); gain.setEnabled(b.type < 3);
         if (force || !type.hasKeyboardFocus(true)) type.setSelectedId(b.type + 1, dontSendNotification);
         enabled.setToggleState(b.enabled, dontSendNotification); bypass.setToggleState(eq.bypassed(), dontSendNotification);
-        for (int i = 0; i < 4; ++i) { const auto state = eq.band(i); bandButtons[size_t(i)].setButtonText(String(i + 1) + "   " + types[state.type] + (state.enabled ? "" : "  [off]")); bandButtons[size_t(i)].setToggleState(i == selected, dontSendNotification); }
+        for (int i = 0; i < 4; ++i) { const auto state = eq.band(i); bandButtons[size_t(i)].setButtonText(String(i + 1) + "   " + types[state.type] + (state.enabled ? "" : TRANS("  [off]"))); bandButtons[size_t(i)].setToggleState(i == selected, dontSendNotification); }
         syncing = false; graph.repaint();
     }
     void timerCallback() override { sync(); }

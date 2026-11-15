@@ -50,7 +50,7 @@ void runNormalizeTests(const File& directory, StringArray& passed) {
     };
     auto dismiss = [&](int result, String value) {
         auto* prompt = w.normalizePrompt.getComponent(); if (!prompt) throw std::runtime_error("Missing normalize dialog");
-        prompt->setAlpha(0); prompt->getTextEditor("target")->setText(value, false); prompt->triggerButtonClick(String::fromUTF8(result ? "適用" : "キャンセル")); pump();
+        prompt->setAlpha(0); prompt->getTextEditor("target")->setText(value, false); prompt->triggerButtonClick(TRANS(String::fromUTF8(result ? "適用" : "キャンセル"))); pump();
     };
     w.showNormalizeDialog(trackId, clipId);
     check(w.normalizePrompt && w.normalizePrompt->getTextEditorContents("target") == "-1.0", "Native normalization dialog defaults to minus one dBFS");

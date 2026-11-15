@@ -88,11 +88,11 @@ void runPitchScoopTests(const File& directory, StringArray& passed) {
     slider("scoopDepth")->setValue(200, sendNotificationSync); slider("scoopCurve")->setValue(2, sendNotificationSync);
     check(e.pitchPreviewActive && p.notes == before, "Moving scoop sliders retunes a running preview without changing the note until confirmation");
     if (auto stream = directory.getChildFile("pitch-scoop-dialog-preview.png").createOutputStream()) { stream->setPosition(0); stream->truncate(); PNGImageFormat().writeImageToStream(dialog->createComponentSnapshot(dialog->getLocalBounds()), *stream); }
-    dialog->triggerButtonClick(String::fromUTF8("キャンセル")); settle();
+    dialog->triggerButtonClick(TRANS(String::fromUTF8("キャンセル"))); settle();
     check(!p.scoopPrompt && !e.pitchPreviewActive && p.notes == before, "Cancel stops scoop audition and keeps the previous note settings");
     p.editScoop(); dialog = p.scoopPrompt.getComponent(); dialog->setAlpha(0); controls = dialog->getCustomComponent(0);
     slider("scoopDepth")->setValue(100, sendNotificationSync); slider("scoopDuration")->setValue(400, sendNotificationSync); slider("scoopCurve")->setValue(2, sendNotificationSync);
-    dialog->triggerButtonClick(String::fromUTF8("設定")); settle();
+    dialog->triggerButtonClick(TRANS(String::fromUTF8("設定"))); settle();
     check(p.notes[0].scoop.enabled && p.notes[0].scoop.depthCents == 100 && p.notes[0].scoop.durationMs == 400 && p.notes[0].scoop.curve == 2 && p.hasPendingEdits(),
           "Confirming scoop settings stages the chosen depth, length and rise speed");
     const auto staged = p.notes; p.undoLocal(); check(p.notes == before, "Scoop settings support local Undo before Apply"); p.redoLocal(); check(p.notes == staged, "Scoop settings support local Redo");

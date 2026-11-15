@@ -41,11 +41,11 @@ void runRecentProjectTests(const File& directory, StringArray& passed) {
     w.trackName.setText("Unsaved recent edit", false); w.trackName.onFocusLost(); w.showProjectStart();
     start.list.selectRow(1); start.openRecent.onClick();
     check(w.savePrompt && w.savePrompt->isCurrentlyModal() && start.isVisible(), "Opening a recent project still asks about unsaved changes");
-    w.savePrompt->setAlpha(0); w.savePrompt->triggerButtonClick("Cancel"); pump();
+    w.savePrompt->setAlpha(0); w.savePrompt->triggerButtonClick(TRANS("Cancel")); pump();
     check(w.projectFile == first && w.dirty && start.isVisible() && w.recentProjects[0] == first,
           "Cancelling a recent-project switch preserves edits, current project and history order");
     start.create.onClick(); check(w.savePrompt != nullptr, "New project from the startup screen also protects unsaved edits");
-    w.savePrompt->setAlpha(0); w.savePrompt->triggerButtonClick("Discard changes"); pump();
+    w.savePrompt->setAlpha(0); w.savePrompt->triggerButtonClick(TRANS("Discard changes")); pump();
     check(w.projectFile == File() && !w.dirty && w.engine.tracks.size() == 1 && !start.isVisible() && w.recentProjects.size() == 2,
           "Confirmed new project opens a clean session while retaining recent history");
     const auto missing = root.getChildFile("Moved project.auralis");

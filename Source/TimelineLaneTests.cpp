@@ -11,8 +11,8 @@ void runTimelineLaneTests(const File& directory, StringArray& passed) {
         return MouseEvent(Desktop::getInstance().getMainMouseSource(), p, ModifierKeys(ModifierKeys::leftButtonModifier), 1, 0, 0, 0, 0, &t, &t, now, p, now, 1, true);
     };
     auto upper = event(1, 12), lower = event(1, Timeline::seekLaneHeight + 12);
-    t.mouseMove(upper); check(t.getMouseCursor() == MouseCursor::DraggingHandCursor && t.getTooltip().contains("playhead"), "Upper timeline lane identifies playhead dragging with a hand cursor and tooltip");
-    t.mouseMove(lower); check(t.getMouseCursor() == MouseCursor::CrosshairCursor && t.getTooltip().contains("range"), "Lower timeline lane identifies range selection with a crosshair and tooltip");
+    t.mouseMove(upper); check(t.getMouseCursor() == MouseCursor::DraggingHandCursor && t.getTooltip() == TRANS("Drag to move the playhead. Shift: snap to beats."), "Upper timeline lane identifies playhead dragging with a hand cursor and tooltip");
+    t.mouseMove(lower); check(t.getMouseCursor() == MouseCursor::CrosshairCursor && t.getTooltip() == TRANS("Drag to select a time range. L: repeat. P: punch in. Export uses this range."), "Lower timeline lane identifies range selection with a crosshair and tooltip");
     t.mouseDown(lower); auto rangeEnd = event(3, 12); t.mouseDrag(rangeEnd); t.mouseUp(rangeEnd);
     check(w.hasTimeSelection && std::abs(w.timeSelection.getStart() - 1) < 1e-9 && std::abs(w.timeSelection.getEnd() - 3) < 1e-9 && w.engine.cursor == 0.25,
           "Dragging from the range lane selects time without seeking even when crossing into the playhead lane");

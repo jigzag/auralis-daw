@@ -4,7 +4,7 @@
 
 namespace auralis {
 struct ProjectLimits {
-    static constexpr juce::int64 jsonBytes = 32 * 1024 * 1024, audioBytes = 1024LL * 1024 * 1024;
+    static constexpr juce::int64 jsonBytes = 32 * 1024 * 1024, maximumAudioBytes = 16LL * 1024 * 1024 * 1024;
     static constexpr int depth = 48, jsonTokens = 2000000, tracks = 128, clips = 8192, notes = 100000, events = 100000;
     static constexpr int plugins = 128, pluginsPerChain = 32, stateBytes = 8 * 1024 * 1024, allStateBytes = 16 * 1024 * 1024;
     static constexpr int pitchNotes = 20000, curvePoints = 1000000;
@@ -27,4 +27,6 @@ private:
 void validateLocalProjectPath(const juce::File&);
 void validateProjectPluginPath(const juce::PluginDescription&);
 juce::MemoryBlock decodeProjectBlock(const juce::String&, size_t maximum);
+juce::int64 projectAudioBudgetForMemory(juce::int64 physicalBytes, juce::int64 availableBytes);
+juce::int64 currentProjectAudioBudget();
 }

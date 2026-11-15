@@ -19,8 +19,8 @@ private:
     friend void runRecentProjectTests(const File&, StringArray&);
     Workstation& owner;
     Rectangle<int> card;
-    ListBox list {"Recent projects", this};
+    ListBox list {TRANS("Recent projects"), this};
     Label empty;
-    TextButton create {"New project"}, browse {"Open project..."}, openRecent {"Open selected"}, remove {"Remove from list"}, close {"Continue session"};
+    TextButton create {TRANS("New project")}, browse {TRANS("Open project...")}, openRecent {TRANS("Open selected")}, remove {TRANS("Remove from list")}, close {TRANS("Continue session")};
 };
 }

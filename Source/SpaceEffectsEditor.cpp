@@ -38,7 +38,7 @@ public:
         nativeUI::style(theme); setLookAndFeel(&theme); addAndMakeVisible(graph);
         addAndMakeVisible(presetLabel); presetLabel.setText(String::fromUTF8("プリセット"), dontSendNotification); addAndMakeVisible(presets); presets.setComponentID("spacePreset");
         presets.addItem(String::fromUTF8("カスタム"), 1);
-        if constexpr (isDelay) presets.addItemList({"Slapback", "Tempo echo", "Ping-pong dotted"}, 2); else presets.addItemList({"Small room", "Hall", "Ambient"}, 2);
+        if constexpr (isDelay) presets.addItemList({TRANS("Slapback"), TRANS("Tempo echo"), TRANS("Ping-pong dotted")}, 2); else presets.addItemList({TRANS("Small room"), TRANS("Hall"), TRANS("Ambient")}, 2);
         presets.setSelectedId(1, dontSendNotification); presets.onChange = [this] { if (presets.getSelectedId() > 1) { effect.preset(presets.getSelectedId() - 1); syncControls(); } };
         auto add = [&](int i, const char* id, const char* label, double low, double high, double step, const String& suffix) { auto& slider = sliders[size_t(i)]; nativeUI::slider(slider, id, low, high, step, suffix); addAndMakeVisible(slider); labels[size_t(i)].setText(String::fromUTF8(label), dontSendNotification); addAndMakeVisible(labels[size_t(i)]); slider.onValueChange = [this, i] { apply(i); }; };
         if constexpr (isDelay) {

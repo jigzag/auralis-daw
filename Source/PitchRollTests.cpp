@@ -52,7 +52,7 @@ void runPitchRollTests(const File& directory, StringArray& passed) {
     check(grid.pixels > oldPixels && std::abs((p.viewport.getViewPositionX() + wheelAt.x) / grid.pixels - time) < 0.005, "Pitch editor Ctrl+wheel zoom preserves the pointer's source time");
     p.fit(); p.numericPitch(); check(p.numericPrompt != nullptr, "An individual audio note exposes a musical-note and cents dialog");
     p.numericPrompt->getComboBoxComponent("note")->setSelectedItemIndex(70 - 24, dontSendNotification); p.numericPrompt->getTextEditor("cents")->setText("12", false);
-    auto dismiss = [&](String button) { p.numericPrompt->setAlpha(0); p.numericPrompt->triggerButtonClick(button); const auto end = Time::getMillisecondCounterHiRes() + 120; while (Time::getMillisecondCounterHiRes() < end) pump(); };
+    auto dismiss = [&](String button) { p.numericPrompt->setAlpha(0); p.numericPrompt->triggerButtonClick(TRANS(button)); const auto end = Time::getMillisecondCounterHiRes() + 120; while (Time::getMillisecondCounterHiRes() < end) pump(); };
     dismiss(String::fromUTF8("設定")); check(approx(p.notes[size_t(first)].target, 70.12), "Numeric note editing accepts an exact note plus cents");
     const auto staged = p.notes; p.numericPitch(); dismiss(String::fromUTF8("キャンセル")); check(p.notes == staged, "Cancelling numeric pitch entry leaves staged notes unchanged");
     p.numericPitch(); p.numericPrompt->getTextEditor("cents")->setText("bad", false); dismiss(String::fromUTF8("設定")); check(p.notes == staged, "Malformed per-note numeric input cannot corrupt note targets");
@@ -98,7 +98,7 @@ void runPitchRollTests(const File& directory, StringArray& passed) {
     check(trimResult.source && trimResult.correctedFrames > 0 && saved.pitchSettings.notes[0].start < trimmed.offset, "Manual note coordinates remain valid after trimming the source start");
     first = find(69.35); p.selected = {first}; p.moveSelected(0.01); window.closeButtonPressed();
     auto* closePrompt = dynamic_cast<AlertWindow*>(Component::getCurrentlyModalComponent()); check(closePrompt != nullptr, "Closing a pitch editor with pending changes asks before discarding them");
-    closePrompt->setAlpha(0); closePrompt->triggerButtonClick(String::fromUTF8("戻る"));
+    closePrompt->setAlpha(0); closePrompt->triggerButtonClick(TRANS(String::fromUTF8("戻る")));
     const auto modalEnd = Time::getMillisecondCounterHiRes() + 140; while (Time::getMillisecondCounterHiRes() < modalEnd) pump();
     check(window.isVisible() && p.hasPendingEdits(), "Cancelling editor close keeps unapplied note edits available");
     p.discard(); p.fit(); p.selected = {first}; p.showSelectedMessage();

@@ -17,24 +17,24 @@ MixerStrip::MixerStrip(Workstation& w, String id) : trackId(std::move(id)), owne
     fader.setComponentID("mixerGain"); fader.setSliderStyle(Slider::LinearVertical); fader.setRange(-60, 6, 0.1);
     fader.setSkewFactorFromMidPoint(-12); fader.setTextBoxStyle(Slider::TextBoxBelow, false, 70, 21);
     fader.setTextValueSuffix(" dB"); fader.setDoubleClickReturnValue(true, 0);
-    fader.setTooltip("Volume. Double-click: 0 dB. Type a value below the fader. -60 dB: silence.");
+    fader.setTooltip(TRANS("Volume. Double-click: 0 dB. Type a value below the fader. -60 dB: silence."));
     pan.setComponentID("mixerPan"); pan.setSliderStyle(Slider::LinearHorizontal); pan.setRange(-1, 1, 0.01);
     pan.setTextBoxStyle(Slider::NoTextBox, false, 0, 0); pan.setDoubleClickReturnValue(true, 0);
-    pan.setTooltip("Pan left / right. Double-click: center.");
+    pan.setTooltip(TRANS("Pan left / right. Double-click: center."));
     fader.onValueChange = [this] { owner.setMixerValue(trackId, fader.getValue()); };
     pan.onValueChange = [this] { owner.setMixerValue(trackId, pan.getValue(), true); };
     addAndMakeVisible(name); name.setWantsKeyboardFocus(false);
     name.onClick = [this] { if (!owner.busy && trackId.isNotEmpty()) for (int i = 0; i < int(owner.engine.tracks.size()); ++i)
         if (owner.engine.tracks[size_t(i)]->id == trackId) { owner.selectTrack(i); return; } };
-    name.setTooltip("Select this track and show its inputs and inserts in the right panel");
+    name.setTooltip(TRANS("Select this track and show its inputs and inserts in the right panel"));
     for (auto entry : {std::pair<TextButton*, TrackControl>{&arm, TrackControl::recordArm}, {&mute, TrackControl::mute}, {&solo, TrackControl::solo}, {&monitor, TrackControl::monitor}}) {
         auto& button = *entry.first; addAndMakeVisible(button); button.setWantsKeyboardFocus(false);
         button.onClick = [this, action = entry.second] { if (!owner.busy) owner.toggleTrackControl(trackId, action); };
     }
     arm.setColour(TextButton::buttonOnColourId, Colour(0xffa63e52)); mute.setColour(TextButton::buttonOnColourId, Colour(0xff9b742c)); solo.setColour(TextButton::buttonOnColourId, Colour(0xff3c788e));
-    arm.setTooltip("Arm track for recording"); mute.setTooltip("Mute track"); solo.setTooltip("Solo track");
-    monitor.setComponentID("mixerMonitor"); monitor.setTooltip("Input monitor: hear live input instead of this track's clips"); monitor.setColour(TextButton::buttonOnColourId, Colour(0xff337b65));
-    if (trackId.isEmpty()) { pan.setVisible(false); arm.setVisible(false); mute.setVisible(false); solo.setVisible(false); monitor.setVisible(false); name.setButtonText("MASTER"); }
+    arm.setTooltip(TRANS("Arm track for recording")); mute.setTooltip(TRANS("Mute track")); solo.setTooltip(TRANS("Solo track"));
+    monitor.setComponentID("mixerMonitor"); monitor.setTooltip(TRANS("Input monitor: hear live input instead of this track's clips")); monitor.setColour(TextButton::buttonOnColourId, Colour(0xff337b65));
+    if (trackId.isEmpty()) { pan.setVisible(false); arm.setVisible(false); mute.setVisible(false); solo.setVisible(false); monitor.setVisible(false); name.setButtonText(TRANS("MASTER")); }
     if (trackId.isEmpty()) {
         addAndMakeVisible(add); addAndMakeVisible(more); addAndMakeVisible(inserts); inserts.setComponentID("masterInserts");
         add.setComponentID("masterAddInsert"); more.setComponentID("masterInsertMenu"); inserts.setRowHeight(18);
@@ -86,7 +86,7 @@ int MixerStrip::getNumRows() { return trackId.isEmpty() ? int(owner.engine.maste
 void MixerStrip::paintListBoxItem(int i, Graphics& g, int width, int height, bool selectedRow) {
     if (!isPositiveAndBelow(i, int(owner.engine.masterInserts.size()))) return;
     auto& p = *owner.engine.masterInserts[size_t(i)]; if (selectedRow) { g.setColour(Colour(0xff30463f)); g.fillAll(); }
-    g.setColour(Colour(p.bypass ? 0xff8d9cab : 0xffe2e9ee)); g.setFont(10); g.drawText(p.description.name + (p.bypass ? " [off]" : ""), 3, 0, width - 6, height, Justification::centredLeft);
+    g.setColour(Colour(p.bypass ? 0xff8d9cab : 0xffe2e9ee)); g.setFont(10); g.drawText(p.description.name + (p.bypass ? TRANS(" [off]") : ""), 3, 0, width - 6, height, Justification::centredLeft);
 }
 void MixerStrip::listBoxItemDoubleClicked(int i, const MouseEvent&) { if (isPositiveAndBelow(i, int(owner.engine.masterInserts.size()))) owner.trackInsertAction({}, owner.engine.masterInserts[size_t(i)]->id, 1); }
 String MixerStrip::getTooltipForRow(int i) { return isPositiveAndBelow(i, int(owner.engine.masterInserts.size())) ? pluginHelp(owner.engine.masterInserts[size_t(i)]->description) : String(); }
@@ -114,8 +114,8 @@ void MixerPanel::resized() {
 }
 void MixerPanel::paint(Graphics& g) {
     g.fillAll(Colour(0xff11151b)); g.setColour(Colour(0xff34414e)); g.drawHorizontalLine(0, 0, float(getWidth()));
-    g.setColour(Colour(0xff80e3c0)); g.setFont(12); g.drawText("MIXER", 13, 3, 74, 26, Justification::centredLeft);
-    g.setColour(Colour(0xff8d9cab)); g.setFont(10); g.drawText("F3: show / hide    |    Double-click fader: 0 dB", 92, 3, getWidth() - 170, 26, Justification::centredLeft);
-    if (strips.empty()) text(g, "Add a track to start mixing", viewport.getBounds(), 14);
+    g.setColour(Colour(0xff80e3c0)); g.setFont(12); g.drawText(TRANS("MIXER"), 13, 3, 74, 26, Justification::centredLeft);
+    g.setColour(Colour(0xff8d9cab)); g.setFont(10); g.drawText(TRANS("F3: show / hide    |    Double-click fader: 0 dB"), 92, 3, getWidth() - 170, 26, Justification::centredLeft);
+    if (strips.empty()) text(g, TRANS("Add a track to start mixing"), viewport.getBounds(), 14);
 }
 }

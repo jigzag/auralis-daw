@@ -137,7 +137,7 @@ void runPitchCorrectionTests(const File& directory, StringArray& passed) {
         stream->setPosition(0); stream->truncate(); PNGImageFormat().writeImageToStream(w.pitchPrompt->createComponentSnapshot(w.pitchPrompt->getLocalBounds()), *stream);
     }
     auto dismiss = [&](String button) {
-        w.pitchPrompt->setAlpha(0); w.pitchPrompt->triggerButtonClick(button);
+        w.pitchPrompt->setAlpha(0); w.pitchPrompt->triggerButtonClick(TRANS(button));
         const double until = Time::getMillisecondCounterHiRes() + 120; while (Time::getMillisecondCounterHiRes() < until) pump();
     };
     const auto unchanged = current().source;

@@ -124,7 +124,13 @@ std::shared_ptr<SourceAudio> Engine::readAudio(const File& file, int64* remainin
             "Audio is empty or exceeds the 64 million sample limit per file. Split long recordings first.");
     require(std::isfinite(reader->sampleRate) && reader->sampleRate >= 8000 && reader->sampleRate <= 768000 && reader->numChannels >= 1 && reader->numChannels <= 64, "Invalid audio sample rate or channel count.");
     const int64 bytes = int64(jmin(2u, reader->numChannels)) * reader->lengthInSamples * int64(sizeof(float)) + ((reader->lengthInSamples + 63) / 64) * 2 * int64(sizeof(float)) + 4096;
-    require(!remainingProjectBytes || bytes <= *remainingProjectBytes, "Project decoded audio and waveforms exceed the 1 GiB memory budget.");
+    if (remainingProjectBytes) {
+        const auto availableBudget = jmin(*remainingProjectBytes, currentProjectAudioBudget());
+        require(bytes <= availableBudget, String::fromUTF8("音声の読み込みに使えるメモリの上限に達しました。\n素材: ") + file.getFileName()
+            + String::fromUTF8("\nこの素材に必要: ") + String(bytes / (1024.0 * 1024), 1) + " MiB"
+            + String::fromUTF8(" / 上限までの残り: ") + String(availableBudget / (1024.0 * 1024), 1) + " MiB"
+            + String::fromUTF8("\n他のアプリを閉じてから、プロジェクトを開き直してください。"));
+    }
     auto audio = std::make_shared<SourceAudio>();
     audio->file = file;
     audio->rate = reader->sampleRate;
@@ -673,7 +679,7 @@ void Engine::loadProject(const ProjectDocument& document, ProjectLoadApproval ap
     require(!recording, "Stop recording before opening a project.");
     document.requireApproval(approval);
     const auto& root = document.root;
-    int64 remainingBytes = ProjectLimits::audioBytes;
+    int64 remainingBytes = currentProjectAudioBudget();
     auto loadMedia = [&](const String& raw, auto& cache) {
         const auto entry = document.media.find(raw); require(entry != document.media.end(), "Unvalidated project media path."); const auto& path = entry->second;
         validateLocalProjectPath(path); auto& source = cache[path.getFullPathName()]; if (!source) source = readAudio(path, &remainingBytes); return source;
