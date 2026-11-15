@@ -33,7 +33,7 @@ MixerStrip::MixerStrip(Workstation& w, String id) : trackId(std::move(id)), owne
     }
     arm.setColour(TextButton::buttonOnColourId, Colour(0xffa63e52)); mute.setColour(TextButton::buttonOnColourId, Colour(0xff9b742c)); solo.setColour(TextButton::buttonOnColourId, Colour(0xff3c788e));
     arm.setTooltip("Arm track for recording"); mute.setTooltip("Mute track"); solo.setTooltip("Solo track");
-    monitor.setComponentID("mixerMonitor"); monitor.setTooltip("Input monitor: hear this audio track's input"); monitor.setColour(TextButton::buttonOnColourId, Colour(0xff337b65));
+    monitor.setComponentID("mixerMonitor"); monitor.setTooltip("Input monitor: hear live input instead of this track's clips"); monitor.setColour(TextButton::buttonOnColourId, Colour(0xff337b65));
     if (trackId.isEmpty()) { pan.setVisible(false); arm.setVisible(false); mute.setVisible(false); solo.setVisible(false); monitor.setVisible(false); name.setButtonText("MASTER"); }
     if (trackId.isEmpty()) {
         addAndMakeVisible(add); addAndMakeVisible(more); addAndMakeVisible(inserts); inserts.setComponentID("masterInserts");

@@ -1,5 +1,6 @@
 #include "ProjectStart.h"
 #include "PianoRoll.h"
+#include "PitchRoll.h"
 namespace auralis {
 void Workstation::loadRecentProjects() {
     recentProjects.clear(); if (recentProjectsFile == File()) return;
@@ -35,7 +36,7 @@ void Workstation::showProjectStart(bool visible) {
 void Workstation::newProject() {
     requestClose([safe = Component::SafePointer<Workstation>(this)] {
         if (!safe) return;
-        safe->pianoWindows.clear(); safe->pluginWindows.clear(); safe->engine.reset(); safe->hasTimeSelection = false; safe->engine.addTrack(); safe->undo.clear(); safe->projectFile = {};
+        safe->pitchWindows.clear(); safe->pianoWindows.clear(); safe->pluginWindows.clear(); safe->engine.reset(); safe->hasTimeSelection = false; safe->engine.addTrack(); safe->undo.clear(); safe->projectFile = {};
         safe->timeline.selectedClip = -1; safe->selectTrack(0); safe->markProjectSaved(); safe->tempo.setText("120"); safe->refresh(); safe->showProjectStart(false); safe->setStatus("New project.");
     });
 }

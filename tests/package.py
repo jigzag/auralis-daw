@@ -2,21 +2,36 @@
 import shutil
 import zipfile
 import re
+import os
+import atexit
+import uuid
 from pathlib import Path
+from portable_install import publish
 
 root = Path(__file__).resolve().parent.parent
 version = re.search(r"project\(Auralis VERSION ([\d.]+)", (root / "CMakeLists.txt").read_text()).group(1)
 verification = root / f"test-output-v{version.replace('.', '')}"
 dist = root / "dist"
-portable = dist / f"Auralis-{version}"
+dist.mkdir(exist_ok=True)
+package_work = root / "build" / "packaging"
+package_work.mkdir(parents=True, exist_ok=True)
+assert package_work.resolve().is_relative_to(root)
+staging = package_work / ("staging-" + uuid.uuid4().hex)
+staging.mkdir()
+assert staging.resolve().parent == package_work.resolve()
+
+
+def clean_staging():
+    if staging.exists():
+        assert staging.resolve().parent == package_work.resolve() and staging.name.startswith("staging-")
+        shutil.rmtree(staging)
+
+
+atexit.register(clean_staging)
+portable = staging / "Auralis"
 portable.mkdir(parents=True, exist_ok=True)
-# Carry forward local device/plugin preferences without modifying a running older release.
-releases = [p for p in dist.glob("Auralis-*") if p.is_dir() and p != portable and re.fullmatch(r"Auralis-\d+\.\d+\.\d+", p.name) and (p / "Data").is_dir()]
-releases.sort(key=lambda p: tuple(map(int, p.name.removeprefix("Auralis-").split("."))))
-previous_data = releases[-1] / "Data" if releases else dist / "Auralis/Data"
-if previous_data.is_dir() and not (portable / "Data").exists():
-    shutil.copytree(previous_data, portable / "Data")
 shutil.copy2(root / "build/Auralis_artefacts/Release/Auralis.exe", portable / "Auralis.exe")
+shutil.copy2(root / "build/Auralis_artefacts/JuceLibraryCode/icon.ico", portable / "Auralis.ico")
 for name in ("README.md", "LICENSE.md", "COPYING", "preview.png", "piano-roll.png"):
     shutil.copy2(root / name, portable / name)
 shutil.copytree(root / "Demo", portable / "Demo", dirs_exist_ok=True)
@@ -34,11 +49,15 @@ shutil.copy2(verification / "arrangement-wide-zoom-preview.png", portable / "arr
 shutil.copy2(verification / "piano-wide-zoom-preview.png", portable / "piano-wide-zoom-preview.png")
 shutil.copy2(verification / "cut-tool-preview.png", portable / "cut-tool-preview.png")
 shutil.copy2(verification / "cut-verification.txt", portable / "cut-verification.txt")
+for name in ("cut-focus-verification.txt", "cut-controls-preview.png"):
+    shutil.copy2(verification / name, portable / name)
 shutil.copy2(verification / "time-selection-preview.png", portable / "time-selection-preview.png")
 shutil.copy2(verification / "range-mp3-verification.txt", portable / "range-mp3-verification.txt")
 shutil.copy2(verification / "project-open-verification.txt", portable / "project-open-verification.txt")
 shutil.copy2(verification / "track-delete-verification.txt", portable / "track-delete-verification.txt")
 shutil.copy2(verification / "clip-gain-verification.txt", portable / "clip-gain-verification.txt")
+for name in ("pitch-editor-loop-preview.png", "pitch-editor-loop-verification.txt", "pitch-vertical-zoom-preview.png", "pitch-vertical-zoom-verification.txt", "pitch-curve-measurements.txt", "pitch-curve-preview.png", "pitch-curve-verification.txt", "pitch-scoop-dialog-preview.png", "pitch-scoop-curve-preview.png", "pitch-scoop-verification.txt", "pitch-follow-preview.png", "pitch-follow-verification.txt", "pitch-drag-preview.png", "pitch-preview-verification.txt", "pitch-roll-preview.png", "pitch-roll-verification.txt", "pitch-correction-verification.txt", "pitch-correction-dialog-preview.png", "normalize-verification.txt", "normalize-dialog-preview.png"):
+    shutil.copy2(verification / name, portable / name)
 shutil.copy2(verification / "clip-gain-preview.png", portable / "clip-gain-preview.png")
 shutil.copy2(verification / "clip-trim-verification.txt", portable / "clip-trim-verification.txt")
 shutil.copy2(verification / "clip-trim-preview.png", portable / "clip-trim-preview.png")
@@ -83,13 +102,13 @@ shutil.copy2(root / "vendor/LAME-SOURCE.txt", notices / "LAME-SOURCE.txt")
     encoding="utf-8",
 )
 
-with zipfile.ZipFile(dist / f"Auralis-{version}-Windows-x64.zip", "w", zipfile.ZIP_DEFLATED, compresslevel=6) as out:
+with zipfile.ZipFile(staging / f"Auralis-{version}-Windows-x64.zip", "w", zipfile.ZIP_DEFLATED, compresslevel=6) as out:
     for path in portable.rglob("*"):
         if path.is_file() and "Data" not in path.relative_to(portable).parts:
-            out.write(path, path.relative_to(dist))
+            out.write(path, Path("Auralis") / path.relative_to(portable))
 
 source_items = ["CMakeLists.txt", "build.ps1", "README.md", "LICENSE.md", "COPYING", ".gitignore", "Source", "tests", "vendor", "Demo", "Assets"]
-with zipfile.ZipFile(dist / f"Auralis-{version}-source.zip", "w", zipfile.ZIP_DEFLATED, compresslevel=6) as out:
+with zipfile.ZipFile(staging / f"Auralis-{version}-source.zip", "w", zipfile.ZIP_DEFLATED, compresslevel=6) as out:
     for name in source_items:
         item = root / name
         paths = [item] if item.is_file() else item.rglob("*")
@@ -97,7 +116,17 @@ with zipfile.ZipFile(dist / f"Auralis-{version}-source.zip", "w", zipfile.ZIP_DE
             if path.is_file() and ".git" not in path.relative_to(root).parts and "__pycache__" not in path.parts and path.name not in ("asio-sdk.zip", "lame-3.100.tar.gz"):
                 out.write(path, Path("auralis-daw") / path.relative_to(root))
 
-for path in (dist / f"Auralis-{version}-source.zip", dist / f"Auralis-{version}-Windows-x64.zip"):
+archives = (staging / f"Auralis-{version}-source.zip", staging / f"Auralis-{version}-Windows-x64.zip")
+for path in archives:
     with zipfile.ZipFile(path) as archive:
         assert archive.testzip() is None
     print(f"{path.name}: {path.stat().st_size:,} bytes")
+
+# Both archives and all app files are ready before touching the fixed installation.
+migrated = publish(portable, dist / "Auralis", package_work / "migration-backup")
+for path in archives:
+    os.replace(path, dist / path.name)
+if migrated:
+    print(f"Migrated local Data from: {migrated}")
+print(f"Updated fixed launch path: {dist / 'Auralis' / 'Auralis.exe'}")
+clean_staging()

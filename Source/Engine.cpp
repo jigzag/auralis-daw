@@ -171,8 +171,9 @@ void Engine::prepareTrack(Track& track) {
         p->instance->prepareToPlay(rate, block);
     }
 }
-void Engine::play() { midiDiscontinuity = true; playing = true; }
+void Engine::play() { stopPitchPreview({}, true); midiDiscontinuity = true; playing = true; }
 void Engine::stop() {
+    stopPitchPreview({}, true);
     if (recording) finishRecording();
     playing = false;
     midiDiscontinuity = true;
@@ -191,12 +192,15 @@ void Engine::stop() {
 void Engine::seek(double seconds) {
     const ScopedLock guard(lock);
     require(!recording, "Stop recording before moving the playhead.");
+    stopPitchPreview({}, true);
     cursor = jmax(0.0, seconds);
     midiDiscontinuity = true;
     for (auto& t : tracks) for (auto& p : t->inserts) p->instance->reset();
     for (auto& p : masterInserts) p->instance->reset();
 }
 void Engine::beginRecording() {
+    clearPitchLoop();
+    stopPitchPreview({}, true);
     auto* device = devices.getCurrentAudioDevice();
     require(device != nullptr, "Enable an audio output device before recording.");
     const int available = device->getActiveInputChannels().countNumberOfSetBits();
@@ -294,8 +298,9 @@ void Engine::removePlugin(int track, int insert) {
 Optional<AudioPlayHead::PositionInfo> Engine::getPosition() const {
     PositionInfo info; info.setTimeInSamples(int64(cursor * rate)); info.setTimeInSeconds(cursor.load());
     info.setBpm(bpm.load()); info.setPpqPosition(cursor * bpm / 60.0); info.setTimeSignature(TimeSignature {4, 4});
-    info.setIsPlaying(playing || exporting); info.setIsRecording(recording && countInRemaining == 0 && !recordingComplete && (!recordRange || cursor >= recordFrom)); info.setIsLooping(loop && !exporting);
-    info.setLoopPoints(LoopPoints {loopStart * bpm / 60.0, loopEnd * bpm / 60.0});
+    const bool editorLoop = pitchLoopActive && !recording && !exporting;
+    info.setIsPlaying(playing || exporting); info.setIsRecording(recording && countInRemaining == 0 && !recordingComplete && (!recordRange || cursor >= recordFrom)); info.setIsLooping((loop || editorLoop) && !exporting);
+    info.setLoopPoints(LoopPoints {(editorLoop ? pitchLoopStart.load() : loopStart.load()) * bpm / 60.0, (editorLoop ? pitchLoopEnd.load() : loopEnd.load()) * bpm / 60.0});
     return info;
 }
 void Engine::render(float* const* output, int outputs, int n, const float* const* input, int inputs, bool collectLiveMidi) {
@@ -304,6 +309,7 @@ void Engine::render(float* const* output, int outputs, int n, const float* const
     const ScopedTryLock guard(lock);
     if (!guard.isLocked()) { ++lockMisses; if (recording) dropped += n; return; }
     if (n > capture.getNumSamples()) { ++oversizedBlocks; dropped += n; return; }
+    if (pitchPreviewActive && renderPitchPreview(output, outputs, n)) { if (outputPeak > 1) ++clipped; return; }
     if (collectLiveMidi) {
         // The collector appends to its destination. Never replay a previous block.
         // Drain only after acquiring the edit lock, so a skipped block cannot lose a note-off.
@@ -313,8 +319,9 @@ void Engine::render(float* const* output, int outputs, int n, const float* const
     }
     const double timestamp = Time::getMillisecondCounterHiRes();
     auto sendMidi = [&] { if (!exporting && !externalMidi.isEmpty()) if (auto* port = devices.getDefaultMidiOutput()) port->sendBlockOfMessages(externalMidi, timestamp, rate); };
-    const double sampleRate = rate.load(), from = loopStart.load(), to = loopEnd.load();
-    const bool validLoop = loop && playing && !recording && !exporting && std::isfinite(from) && std::isfinite(to) && from >= 0 && to > from;
+    const bool editorLoop = pitchLoopActive && !recording && !exporting;
+    const double sampleRate = rate.load(), from = editorLoop ? pitchLoopStart.load() : loopStart.load(), to = editorLoop ? pitchLoopEnd.load() : loopEnd.load();
+    const bool validLoop = (editorLoop || loop) && playing && !recording && !exporting && std::isfinite(from) && std::isfinite(to) && from >= 0 && to > from;
     const int64 startFrame = validLoop ? std::llround(from * sampleRate) : 0, endFrame = validLoop ? std::llround(to * sampleRate) : 0;
     if (!validLoop || endFrame <= startFrame) {
         renderChunk(output, outputs, n, input, inputs); if (outputPeak > 1) ++clipped; sendMidi(); return;
@@ -391,7 +398,10 @@ void Engine::renderChunk(float* const* output, int outputs, int n, const float* 
             }
             if (t->monitor && !exporting) for (int ch = 0; ch < 2; ++ch) buffer.copyFrom(ch, 0, capture, ch, 0, n);
         }
-        if (playing || exporting) for (int clipIndex = 0; clipIndex < int(t->clips.size()); ++clipIndex) {
+        // MON replaces this audio track's clip playback with live input. Offline
+        // exports still render the clips, independent of the monitoring switch.
+        const bool inputOnly = t->monitor && !t->midi && !exporting;
+        if ((playing || exporting) && !inputOnly) for (int clipIndex = 0; clipIndex < int(t->clips.size()); ++clipIndex) {
             auto& c = t->clips[size_t(clipIndex)];
             if (c.midi) continue;
             if (c.start >= position + n / sampleRate || c.start + c.length <= position) continue;
@@ -459,6 +469,13 @@ void Engine::renderChunk(float* const* output, int outputs, int n, const float* 
             for (int ch = 0; ch < jmin(outputs, 2); ++ch) if (output[ch]) output[ch][i] += click;
         }
     }
+    if (pitchPreviewResumeFade > 0 && !exporting) {
+        const int total = jmax(1, int(rate * 0.005));
+        for (int i = 0; i < n && pitchPreviewResumeFade > 0; ++i) {
+            const float gain = 1.0f - float(pitchPreviewResumeFade--) / total;
+            for (int ch = 0; ch < outputs; ++ch) if (output[ch]) output[ch][i] *= gain;
+        }
+    }
     float peak = 0;
     for (int ch = 0; ch < outputs; ++ch) if (output[ch]) {
         for (int i = 0; i < n; ++i) if (!std::isfinite(output[ch][i])) output[ch][i] = 0;
@@ -485,6 +502,7 @@ void Engine::audioDeviceIOCallbackWithContext(const float* const* input, int inp
 }
 void Engine::audioDeviceAboutToStart(AudioIODevice* device) {
     const ScopedLock guard(lock);
+    pitchPreviewActive = false; pitchPreviewResumeFade = 0;
     rate = device->getCurrentSampleRate(); block = device->getCurrentBufferSizeSamples();
     inputLatencySamples = jmax(0, device->getInputLatencyInSamples());
     outputLatencySamples = jmax(0, device->getOutputLatencyInSamples());
@@ -494,7 +512,7 @@ void Engine::audioDeviceAboutToStart(AudioIODevice* device) {
     if (auto* port = devices.getDefaultMidiOutput()) port->startBackgroundThread();
     for (auto& t : tracks) prepareTrack(*t);
 }
-void Engine::audioDeviceStopped() { if (recording) deviceInterrupted = true; playing = false; midiDiscontinuity = true; }
+void Engine::audioDeviceStopped() { pitchPreviewActive = false; if (recording) deviceInterrupted = true; playing = false; midiDiscontinuity = true; }
 void Engine::exportWav(const File& file, double start, double end, int bits) {
     exportMix(file, start, end, bits, 0);
 }
@@ -506,7 +524,7 @@ void Engine::exportMix(const File& file, double start, double end, int bits, int
     require(!recording, "Stop recording before exporting.");
     require(std::isfinite(start) && std::isfinite(end) && start >= 0 && end > start && end - start < 86400,
             "Choose an export range longer than zero and shorter than 24 hours.");
-    exporting = true;
+    stopPitchPreview({}, true); exporting = true;
     const ScopedLock guard(lock);
     const double savedCursor = cursor;
     const bool wasPlaying = playing;
@@ -556,7 +574,7 @@ void Engine::exportMix(const File& file, double start, double end, int bits, int
 }
 void Engine::reset() {
     require(!recording, "Stop recording first.");
-    stop(); const ScopedLock guard(lock); tracks.clear(); masterInserts.clear(); cursor = 0; loop = false; metronome = false; bpm = 120;
+    stop(); clearPitchLoop(); const ScopedLock guard(lock); tracks.clear(); masterInserts.clear(); cursor = 0; loop = false; metronome = false; bpm = 120;
     countInBars = 0; recordRange = false; recordFrom = 0; recordTo = 8;
     nextClipOrder = 1;
 }
@@ -565,6 +583,12 @@ void Engine::saveProject(const File& file) {
     const ScopedLock guard(lock);
     File media = file.getSiblingFile(file.getFileNameWithoutExtension() + "_media");
     require(media.createDirectory().wasOk(), "Cannot create project media directory.");
+    auto copyAudio = [&](const std::shared_ptr<SourceAudio>& audio) {
+        const auto base = String::toHexString(audio->file.getFullPathName().hashCode64()) + "_" + audio->file.getFileName();
+        File target = audio->file.getParentDirectory() == media ? audio->file : media.getChildFile(base);
+        if (target != audio->file && !target.existsAsFile()) require(audio->file.copyFileTo(target), "Cannot copy media: " + target.getFileName());
+        return target.getRelativePathFrom(file.getParentDirectory());
+    };
     var root = object(); set(root, "format", "auralis-1"); set(root, "bpm", bpm.load()); set(root, "master", master.load());
     set(root, "cursor", cursor.load()); set(root, "loopStart", loopStart.load()); set(root, "loopEnd", loopEnd.load()); set(root, "loop", loop.load());
     set(root, "metronome", metronome.load());
@@ -584,11 +608,29 @@ void Engine::saveProject(const File& file) {
                 for (auto& event : c.events) { var item = object(); set(item, "beat", event.beat); set(item, "data", MemoryBlock(event.message.getRawData(), size_t(event.message.getRawDataSize())).toBase64Encoding()); events.add(item); }
                 set(v, "notes", notes); set(v, "events", events); clips.add(v); continue;
             }
-            const auto base = String::toHexString(c.source->file.getFullPathName().hashCode64()) + "_" + c.source->file.getFileName();
-            File target = c.source->file.getParentDirectory() == media ? c.source->file : media.getChildFile(base);
-            if (target != c.source->file && !target.existsAsFile()) require(c.source->file.copyFileTo(target), "Cannot copy media: " + target.getFileName());
-            var v = object(); set(v, "order", c.order); set(v, "file", target.getRelativePathFrom(file.getParentDirectory())); set(v, "start", c.start);
-            set(v, "offset", c.offset); set(v, "length", c.length); set(v, "fadeIn", c.fadeIn); set(v, "fadeOut", c.fadeOut); set(v, "gainDb", c.gainDb); set(v, "name", c.name); clips.add(v);
+            var v = object(); set(v, "order", c.order); set(v, "file", copyAudio(c.source)); set(v, "start", c.start);
+            set(v, "offset", c.offset); set(v, "length", c.length); set(v, "fadeIn", c.fadeIn); set(v, "fadeOut", c.fadeOut); set(v, "gainDb", c.gainDb); set(v, "name", c.name);
+            if (c.pitchOriginal) {
+                var pitch = object(); const auto& settings = c.pitchSettings;
+                set(pitch, "originalFile", copyAudio(c.pitchOriginal)); set(pitch, "root", settings.root); set(pitch, "scale", settings.scale); set(pitch, "targetNote", settings.targetNote);
+                set(pitch, "referenceHz", settings.referenceHz); set(pitch, "amount", settings.amount); set(pitch, "speedMs", settings.speedMs);
+                set(pitch, "maxCents", settings.maxCents); set(pitch, "preserveFormants", settings.preserveFormants); set(pitch, "manual", settings.manual);
+                Array<var> edits;
+                for (const auto& note : settings.notes) {
+                    var item = object(); set(item, "start", note.start); set(item, "end", note.end); set(item, "original", note.original); set(item, "target", note.target);
+                    if (note.scoop.enabled) {
+                        var scoop = object(); set(scoop, "start", note.scoop.start); set(scoop, "depthCents", note.scoop.depthCents);
+                        set(scoop, "durationMs", note.scoop.durationMs); set(scoop, "curve", note.scoop.curve); set(item, "scoop", scoop);
+                    }
+                    if (!note.curve.empty()) {
+                        Array<var> points; for (const auto& point : note.curve) { Array<var> pair; pair.add(point.seconds); pair.add(point.note); points.add(var(pair)); }
+                        set(item, "curve", points);
+                    }
+                    edits.add(item);
+                }
+                set(pitch, "noteEdits", edits); set(v, "pitchCorrection", pitch);
+            }
+            clips.add(v);
         }
         for (auto& p : t->inserts) {
             var v = object(); MemoryBlock state; p->instance->getStateInformation(state);
@@ -651,9 +693,41 @@ void Engine::loadProject(const File& file) {
             c.start = jmax(0.0, double(v["start"])); c.offset = jmax(0.0, double(v["offset"]));
             c.length = double(v["length"]); c.fadeIn = jmax(0.0, number(v, "fadeIn", 0.005)); c.fadeOut = jmax(0.0, number(v, "fadeOut", 0.005));
             double gainDb = number(v, "gainDb", 0); require(std::isfinite(gainDb), "Project contains invalid clip volume.");
-            c.gainDb = float(jlimit(-60.0, 12.0, gainDb));
+            c.gainDb = float(jlimit(-60.0, 60.0, gainDb));
             require(std::isfinite(c.start) && std::isfinite(c.offset) && std::isfinite(c.length) && c.length > 0
                     && c.offset + c.length <= source->samples.getNumSamples() / source->rate + 0.01, "Project contains an invalid clip.");
+            if (v.hasProperty("pitchCorrection")) {
+                const auto pitch = v["pitchCorrection"];
+                require(pitch.isObject() && pitch["originalFile"].toString().isNotEmpty(), "Invalid pitch correction metadata.");
+                auto originalPath = file.getParentDirectory().getChildFile(pitch["originalFile"].toString());
+                auto& original = cache[originalPath.getFullPathName()]; if (!original) original = readAudio(originalPath);
+                require(original->rate == source->rate && original->samples.getNumSamples() == source->samples.getNumSamples()
+                        && original->samples.getNumChannels() == source->samples.getNumChannels(), "Pitch correction source dimensions do not match.");
+                auto& settings = c.pitchSettings; settings.root = int(number(pitch, "root", 0)); settings.scale = int(number(pitch, "scale", 0));
+                settings.targetNote = int(number(pitch, "targetNote", -1)); settings.referenceHz = number(pitch, "referenceHz", 440);
+                settings.amount = number(pitch, "amount", 0.75); settings.speedMs = number(pitch, "speedMs", 80); settings.maxCents = number(pitch, "maxCents", 200);
+                settings.preserveFormants = !pitch.hasProperty("preserveFormants") || bool(pitch["preserveFormants"]);
+                settings.manual = bool(pitch["manual"]);
+                if (pitch.hasProperty("noteEdits")) {
+                    require(pitch["noteEdits"].isArray(), "Invalid pitch note edits.");
+                    for (const auto& note : *pitch["noteEdits"].getArray()) {
+                        PitchNoteEdit edit {double(note["start"]), double(note["end"]), double(note["original"]), double(note["target"])};
+                        if (note.hasProperty("scoop")) {
+                            const auto scoop = note["scoop"]; require(scoop.isObject(), "Invalid pitch scoop metadata.");
+                            edit.scoop = {true, number(scoop, "start", edit.start), number(scoop, "depthCents", 100), number(scoop, "durationMs", 150), number(scoop, "curve", 1)};
+                        }
+                        if (note.hasProperty("curve")) {
+                            require(note["curve"].isArray() && note["curve"].size() <= 200000, "Invalid pitch curve.");
+                            for (const auto& point : *note["curve"].getArray()) {
+                                require(point.isArray() && point.size() == 2, "Invalid pitch curve point.");
+                                edit.curve.push_back({double(point[0]), double(point[1])});
+                            }
+                        }
+                        require(edit.end <= original->samples.getNumSamples() / original->rate + 0.001, "Pitch note edit exceeds source audio."); settings.notes.push_back(std::move(edit));
+                    }
+                }
+                require(settings.valid(), "Invalid saved pitch correction settings."); c.pitchOriginal = original;
+            }
             restoreOrder(c); t.clips.push_back(c);
         }
         if (auto* list = row["plugins"].getArray()) for (auto& v : *list) {
@@ -668,7 +742,7 @@ void Engine::loadProject(const File& file) {
         PluginDescription desc; auto xml = parseXML(v["xml"].toString()); require(xml && desc.loadFromXml(*xml), "Invalid master plugin description.");
         MemoryBlock state; state.fromBase64Encoding(v["state"].toString()); staging.addPlugin(-1, desc, &state); staging.masterInserts.back()->bypass = bool(v["bypass"]);
     }
-    stop(); const ScopedLock guard(lock); tracks.swap(staging.tracks);
+    stop(); clearPitchLoop(); const ScopedLock guard(lock); tracks.swap(staging.tracks);
     masterInserts.swap(staging.masterInserts); for (auto& p : masterInserts) p->instance->setPlayHead(this);
     nextClipOrder = staging.nextClipOrder;
     for (auto& t : tracks) for (auto& p : t->inserts) p->instance->setPlayHead(this);

@@ -1,5 +1,6 @@
 #include "Interface.h"
 #include "PianoRoll.h"
+#include "PitchRoll.h"
 #include "Mixer.h"
 #include "PluginInfo.h"
 #include "ProjectStart.h"
@@ -21,14 +22,32 @@ std::vector<int> clipDrawOrder(const Track& track, bool newestFirst = false) {
 }
 }
 
-Timeline::Timeline(Workstation& w) : owner(w) { setMouseCursor(MouseCursor::NormalCursor); }
+Timeline::Timeline(Workstation& w) : owner(w) { setMouseCursor(MouseCursor::NormalCursor); setWantsKeyboardFocus(true); }
+TimelineRuler::TimelineRuler(Timeline& t, Viewport& v) : timeline(t), viewport(v) {
+    setOpaque(true); setComponentID("fixedTimelineRuler");
+    selectTool.setComponentID("selectTool"); cutTool.setComponentID("cutTool");
+    selectTool.setButtonText(String::fromUTF8("選択 V")); cutTool.setButtonText(String::fromUTF8("カット C"));
+    for (auto* button : {&selectTool, &cutTool}) { addAndMakeVisible(button); button->setWantsKeyboardFocus(false); }
+    selectTool.setTooltip("Select and move parts (V). C toggles select / cut.");
+    cutTool.setTooltip("Cut parts (C). Click again or press V to select. Shift: free cut.");
+    selectTool.onClick = [this] { if (selectTool.isEnabled()) timeline.setCutMode(false); };
+    cutTool.onClick = [this] { if (cutTool.isEnabled()) timeline.setCutMode(!timeline.isCutMode()); };
+    cutTool.setColour(TextButton::buttonOnColourId, Colour(0xff9b592c)); syncTools(true);
+}
+void TimelineRuler::resized() {
+    selectTool.setBounds(196, 13, 56, 26); cutTool.setBounds(254, 13, 58, 26);
+}
+void TimelineRuler::syncTools(bool enabled) {
+    selectTool.setToggleState(!timeline.isCutMode(), dontSendNotification); cutTool.setToggleState(timeline.isCutMode(), dontSendNotification);
+    selectTool.setEnabled(enabled); cutTool.setEnabled(enabled);
+}
 TrackControlRow::TrackControlRow(Workstation& owner, const String& trackId) : owner(owner), trackId(trackId) {
     setComponentID(trackId);
     struct Entry { TrackControlButton* button; const char* id; const char* tooltip; TrackControl action; Colour active; };
     for (auto entry : {Entry{&arm, "arm", "Record arm: enable this track for the next recording", TrackControl::recordArm, Colour(0xffa63e52)},
                        Entry{&mute, "mute", "Mute this track", TrackControl::mute, Colour(0xff9b742c)},
                        Entry{&solo, "solo", "Solo this track", TrackControl::solo, Colour(0xff3c788e)},
-                       Entry{&monitor, "monitor", "Input monitor: hear this audio track's input", TrackControl::monitor, Colour(0xff337b65)}}) {
+                       Entry{&monitor, "monitor", "Input monitor: hear live input instead of this track's clips", TrackControl::monitor, Colour(0xff337b65)}}) {
         auto& button = *entry.button; addAndMakeVisible(button); button.setComponentID(entry.id);
         button.setClickingTogglesState(true); button.setWantsKeyboardFocus(false); button.setTooltip(entry.tooltip);
         button.setColour(TextButton::buttonColourId, Colour(0xff29333e)); button.setColour(TextButton::buttonOnColourId, entry.active);
@@ -231,7 +250,7 @@ void Timeline::paint(Graphics& g) {
             g.setColour(track.colour.withAlpha(0.3f)); g.fillRect(r.withHeight(22));
             const bool showGain = !c.midi && ((i == owner.selectedTrack && k == selectedClip) || std::abs(c.gainDb) > 0.0001f);
             auto gainHandle = showGain ? gainHandleBounds(c, i) : Rectangle<float>();
-            label(g, c.name, r.withHeight(22).withTrimmedRight(gainHandle.isEmpty() ? 0 : 76).reduced(8, 0).toNearestInt(), 11, text);
+            label(g, c.name + (c.pitchOriginal ? " [Pitch]" : ""), r.withHeight(22).withTrimmedRight(gainHandle.isEmpty() ? 0 : 76).reduced(8, 0).toNearestInt(), 11, text);
             auto wave = r.withTrimmedTop(28).reduced(0, 8);
             if (c.midi) {
                 g.setColour(track.colour);
@@ -330,9 +349,12 @@ void Timeline::paint(Graphics& g) {
     if (count == 0) label(g, "Drop audio here to start", {header + 45, ruler + 50, 380, 45}, 22, dim);
 }
 void Timeline::setCutMode(bool enabled) {
+    if (enabled && (owner.busy || owner.engine.recording)) return;
     cutMode = enabled; cutHover = {-1, -1};
+    owner.rulerBar.syncTools(!owner.busy && !owner.engine.recording);
+    if (isShowing()) grabKeyboardFocus();
     setMouseCursor(cutMode ? MouseCursor::CrosshairCursor : MouseCursor::NormalCursor);
-    owner.setStatus(cutMode ? "Cut tool: click a clip to split. Shift: free position. V: select tool." : "Select tool. C: cut tool."); repaint();
+    owner.setStatus(cutMode ? "Cut tool: click to split. C / V: select. Shift: free cut. Ctrl+Z: undo." : "Select tool. C: toggle cut. Ctrl+Z: undo."); repaint();
 }
 void Timeline::mouseMove(const MouseEvent& e) {
     if (e.x < header && e.y >= ruler && !owner.engine.recording && !owner.busy) {
@@ -369,6 +391,8 @@ void Timeline::mouseWheelMove(const MouseEvent& e, const MouseWheelDetails& whee
     if (std::abs(delta) > 0.0001) owner.setTimelineZoom(zoom * std::exp(jlimit(-0.7, 0.7, delta * 2.5)), e.position.x);
 }
 void Timeline::mouseDown(const MouseEvent& e) {
+    // Own editing shortcuts instead of leaving focus in a track-name editor.
+    if (!owner.busy && isShowing()) grabKeyboardFocus();
     draggingPlayhead = false; selectingTime = false; dragTrack = -1; dragRemembered = false;
     if (owner.busy || owner.engine.recording) return;
     headerDrag = -1; headerDrop = -1; dropTrack = -1;
@@ -446,7 +470,7 @@ void Timeline::mouseDrag(const MouseEvent& e) {
         else return;
     }
     if (dragMode == 4) {
-        float db = float(std::round(jlimit(-60.0, 12.0, original.gainDb - movement.y * (e.mods.isCtrlDown() ? 0.05 : 0.25)) * 10) / 10);
+        float db = float(std::round(jlimit(-60.0, 60.0, original.gainDb - movement.y * (e.mods.isCtrlDown() ? 0.05 : 0.25)) * 10) / 10);
         if (std::abs(db - c.gainDb) < 0.0001f) return;
         if (!dragRemembered) { owner.rememberEdit(); dragRemembered = true; }
         c.gainDb = db; owner.changed(); repaint(); owner.setStatus("Clip volume " + String(db, 1) + " dB. Ctrl: fine adjustment. Ctrl+Z: undo."); return;
@@ -498,15 +522,18 @@ void Timeline::mouseUp(const MouseEvent& e) {
 void Timeline::mouseDoubleClick(const MouseEvent& e) {
     dragTrack = -1;
     if (cutMode) return;
-    if (e.y < ruler || owner.engine.recording) return;
+    if (e.y < ruler || owner.engine.recording || owner.busy) return;
     int track = trackAt(float(e.y));
     if (!isPositiveAndBelow(track, int(owner.engine.tracks.size()))) return;
     owner.selectTrack(track);
-    if (e.x < header || !owner.engine.tracks[size_t(track)]->midi) return;
+    if (e.x < header) return;
     for (int i : clipDrawOrder(*owner.engine.tracks[size_t(track)], true)) {
         auto& c = owner.engine.tracks[size_t(track)]->clips[size_t(i)];
-        if (timeAt(float(e.x)) >= c.startTime(owner.engine.bpm) && timeAt(float(e.x)) <= c.endTime(owner.engine.bpm)) { selectedClip = i; owner.showPianoRoll(track, i); return; }
+        if (timeAt(float(e.x)) >= c.startTime(owner.engine.bpm) && timeAt(float(e.x)) <= c.endTime(owner.engine.bpm)) {
+            selectedClip = i; if (c.midi) owner.showPianoRoll(track, i); else owner.showPitchRoll(owner.engine.tracks[size_t(track)]->id, c.id); return;
+        }
     }
+    if (!owner.engine.tracks[size_t(track)]->midi) return;
     owner.rememberEdit(); owner.engine.addMidiClip(track, snapTime(owner, timeAt(float(e.x)))); selectedClip = int(owner.engine.tracks[size_t(track)]->clips.size()) - 1;
     owner.changed(); owner.refresh(); owner.showPianoRoll(track, selectedClip);
 }
@@ -701,10 +728,12 @@ Workstation::Workstation(bool connectDevices, const File& pluginRegistry) : time
     setSize(1400, 880); refresh(); startTimerHz(25);
 }
 Workstation::~Workstation() {
+    if (pitchPrompt) { pitchPrompt->setLookAndFeel(nullptr); pitchPrompt->exitModalState(0); }
+    if (normalizePrompt) { normalizePrompt->setLookAndFeel(nullptr); normalizePrompt->exitModalState(0); }
     if (clipGainPrompt) { clipGainPrompt->setLookAndFeel(nullptr); clipGainPrompt->exitModalState(0); }
     if (trackRemovalPrompt) { trackRemovalPrompt->setLookAndFeel(nullptr); trackRemovalPrompt->exitModalState(0); }
     if (savePrompt) { savePrompt->setLookAndFeel(nullptr); savePrompt->exitModalState(0); }
-    stopTimer(); if (worker.joinable()) worker.join(); pianoWindows.clear(); pluginWindows.clear(); projectStart.reset(); mixer.reset(); pluginList.setModel(nullptr);
+    stopTimer(); if (worker.joinable()) worker.join(); pitchWindows.clear(); pianoWindows.clear(); pluginWindows.clear(); projectStart.reset(); mixer.reset(); pluginList.setModel(nullptr);
     try { engine.stop(); } catch (...) {}
     setLookAndFeel(nullptr);
 }
@@ -823,6 +852,7 @@ void Workstation::fitProject() {
     setTimelineZoom(jmax(1, timeline.getWidth() - Timeline::header - 24) / (extent * 1.03));
 }
 void Workstation::refresh() {
+    rulerBar.syncTools(!busy && !engine.recording);
     rulerBar.repaint();
     if (!masterVolume.isMouseButtonDown() && !masterVolume.hasKeyboardFocus(true))
         masterVolume.setValue(Decibels::gainToDecibels(engine.master.load(), -60.0f), dontSendNotification);
@@ -845,6 +875,7 @@ void Workstation::refresh() {
     updateTrack(); if (mixer && mixerVisible) mixer->sync(); timeline.repaint(); repaint();
 }
 void Workstation::timerCallback() {
+    rulerBar.syncTools(!busy && !engine.recording);
     rulerBar.repaint();
     if (busy) { repaint(); return; }
     if (engine.recordingComplete) { try { engine.finishRecording(); changed(); refresh(); status = "Recording range complete. New take added; existing clips preserved."; } catch (const std::exception& e) { error(e.what()); } }
@@ -952,6 +983,7 @@ bool Workstation::removeTrackById(String trackId) {
     String previous = isPositiveAndBelow(selectedTrack, int(engine.tracks.size())) ? engine.tracks[size_t(selectedTrack)]->id : String();
     auto& clips = engine.tracks[size_t(index)]->clips;
     std::erase_if(pianoWindows, [&](auto& window) { return std::any_of(clips.begin(), clips.end(), [&](auto& clip) { return clip.id == window->clipId; }); });
+    std::erase_if(pitchWindows, [&](auto& window) { return window->panel().targetsTrack(trackId); });
     pluginWindows.clear();
     engine.tracks.erase(engine.tracks.begin() + index); engine.midiDiscontinuity = true; undo.clear();
     int next = jlimit(0, jmax(0, int(engine.tracks.size()) - 1), selectedTrack);
@@ -1009,7 +1041,7 @@ bool Workstation::cutClipAt(int track, int clip, double seconds) {
     changed(); refresh(); setStatus("Cut at " + String(seconds, 3) + " s. Ctrl+Z to undo."); return true;
 }
 bool Workstation::setClipGain(const String& trackId, const String& clipId, double db) {
-    if (busy || engine.recording || !std::isfinite(db) || db < -60 || db > 12) return false;
+    if (busy || engine.recording || !std::isfinite(db) || db < -60 || db > 60) return false;
     const ScopedLock guard(engine.lock);
     for (auto& track : engine.tracks) if (track->id == trackId) for (auto& clip : track->clips) if (clip.id == clipId && !clip.midi) {
         float gain = float(std::round(db * 10) / 10);
@@ -1024,7 +1056,7 @@ void Workstation::showClipGainDialog(const String& trackId, const String& clipId
     Clip* target = nullptr;
     for (auto& track : engine.tracks) if (track->id == trackId) for (auto& clip : track->clips) if (clip.id == clipId && !clip.midi) target = &clip;
     if (!target) return;
-    auto* prompt = new AlertWindow("Clip volume", "Volume for \"" + target->name + "\". Range: -60 to +12 dB. 0 dB keeps the original level.", MessageBoxIconType::NoIcon, this);
+    auto* prompt = new AlertWindow("Clip volume", "Volume for \"" + target->name + "\". Range: -60 to +60 dB. 0 dB keeps the original level.", MessageBoxIconType::NoIcon, this);
     prompt->setLookAndFeel(&theme); prompt->setComponentID("clipGainPrompt");
     prompt->addTextEditor("gain", String(target->gainDb, 1), "Volume (dB)");
     prompt->addButton("Apply", 1, KeyPress(KeyPress::returnKey)); prompt->addButton("Cancel", 0, KeyPress(KeyPress::escapeKey));
@@ -1034,8 +1066,8 @@ void Workstation::showClipGainDialog(const String& trackId, const String& clipId
         if (result != 1) return;
         const String value = prompt->getTextEditorContents("gain").trim();
         const auto utf8 = value.toUTF8(); char* end = nullptr; double db = std::strtod(utf8.getAddress(), &end);
-        if (value.isEmpty() || end == utf8.getAddress() || *end != 0 || !std::isfinite(db) || db < -60 || db > 12) {
-            MessageManager::callAsync([safe] { if (safe) safe->error("Enter a clip volume between -60 and +12 dB."); }); return;
+        if (value.isEmpty() || end == utf8.getAddress() || *end != 0 || !std::isfinite(db) || db < -60 || db > 60) {
+            MessageManager::callAsync([safe] { if (safe) safe->error("Enter a clip volume between -60 and +60 dB."); }); return;
         }
         MessageManager::callAsync([safe, trackId, clipId, db] { if (safe) safe->setClipGain(trackId, clipId, db); });
     }), true);
@@ -1068,6 +1100,10 @@ void Workstation::clipMenu(int track, int clip, double clickSeconds) {
     bool midi = engine.tracks[size_t(track)]->clips[size_t(clip)].midi;
     if (!midi) {
         menu.addSeparator(); menu.addItem(9, "Clip volume...");
+        menu.addItem(11, String::fromUTF8("ノーマライズ..."));
+        menu.addItem(14, String::fromUTF8("音程エディター..."));
+        menu.addItem(12, String::fromUTF8("音程補正..."));
+        if (target.pitchOriginal) menu.addItem(13, String::fromUTF8("音程補正を解除"));
         menu.addItem(10, "Reset volume to 0 dB", std::abs(engine.tracks[size_t(track)]->clips[size_t(clip)].gainDb) > 0.0001f);
     }
     if (midi) menu.addItem(7, "Open piano roll");
@@ -1086,6 +1122,10 @@ void Workstation::clipMenu(int track, int clip, double clickSeconds) {
         if (id == 7) { safe->showPianoRoll(track, clip); return; }
         if (id == 9) { MessageManager::callAsync([safe, trackId, clipId] { if (safe) safe->showClipGainDialog(trackId, clipId); }); return; }
         if (id == 10) { safe->setClipGain(trackId, clipId, 0); return; }
+        if (id == 11) { MessageManager::callAsync([safe, trackId, clipId] { if (safe) safe->showNormalizeDialog(trackId, clipId); }); return; }
+        if (id == 12) { MessageManager::callAsync([safe, trackId, clipId] { if (safe) safe->showPitchCorrectionDialog(trackId, clipId); }); return; }
+        if (id == 13) { safe->resetPitchCorrection(trackId, clipId); return; }
+        if (id == 14) { MessageManager::callAsync([safe, trackId, clipId] { if (safe) safe->showPitchRoll(trackId, clipId); }); return; }
         if (id == 1 || id == 8) { safe->cutClipAt(track, clip, id == 8 ? clickSeconds : safe->engine.cursor.load()); return; }
         safe->rememberEdit(); const ScopedLock guard(safe->engine.lock);
         auto& clips = safe->engine.tracks[size_t(track)]->clips; auto& c = clips[size_t(clip)];
@@ -1143,6 +1183,7 @@ MemoryBlock Workstation::pluginStateSnapshot() {
 void Workstation::markProjectSaved() { savedPluginState = pluginStateSnapshot(); dirty = false; }
 void Workstation::requestClose(std::function<void()> action) {
     if (busy) { error("Wait for the current export or plugin scan to finish."); return; }
+    if (blockForPitchEdits()) return;
     if (engine.recording) { error("Stop recording before closing the project."); return; }
     if (savePrompt) { savePrompt->toFront(true); return; }
     if (!dirty && pluginStateSnapshot() == savedPluginState) { action(); return; }
@@ -1226,6 +1267,7 @@ void Workstation::pluginMenu() {
 }
 void Workstation::saveToFile(const File& file, std::function<void()> after) {
     if (busy || engine.recording) return;
+    if (blockForPitchEdits()) return;
     try {
         engine.stop(); engine.saveProject(file); projectFile = file; markProjectSaved();
         const bool historySaved = rememberProject(file);
@@ -1234,6 +1276,7 @@ void Workstation::saveToFile(const File& file, std::function<void()> after) {
 }
 void Workstation::save(bool saveAs, std::function<void()> after) {
     if (busy || engine.recording) return;
+    if (blockForPitchEdits()) return;
     if (saveAs || projectFile == File()) {
         chooser = std::make_unique<FileChooser>("Save Auralis project", projectFile == File() ? File::getSpecialLocation(File::userDocumentsDirectory).getChildFile("Untitled.auralis") : projectFile, "*.auralis");
         chooser->launchAsync(FileBrowserComponent::saveMode | FileBrowserComponent::canSelectFiles | FileBrowserComponent::warnAboutOverwriting,
@@ -1247,7 +1290,7 @@ void Workstation::save(bool saveAs, std::function<void()> after) {
 void Workstation::loadProjectFile(const File& file) {
     if (busy || engine.recording) return;
     try {
-        pianoWindows.clear(); pluginWindows.clear(); engine.loadProject(file); hasTimeSelection = false; projectFile = file;
+        pitchWindows.clear(); pianoWindows.clear(); pluginWindows.clear(); engine.loadProject(file); hasTimeSelection = false; projectFile = file;
         undo.clear(); selectTrack(0); timeline.selectedClip = -1; timeline.setCutMode(false);
         tempo.setText(String(engine.bpm.load(), 1)); loopFrom.setText(String(engine.loopStart, 2)); loopTo.setText(String(engine.loopEnd, 2));
         masterVolume.setValue(Decibels::gainToDecibels(engine.master.load()), dontSendNotification);
@@ -1272,16 +1315,17 @@ void Workstation::open() {
 }
 void Workstation::runBackground(std::function<String()> work, std::function<void()> done) {
     if (worker.joinable()) worker.join(); busy = true; setEnabled(false);
-    for (auto& w : pianoWindows) w->setEnabled(false); for (auto& w : pluginWindows) w->setEnabled(false); repaint();
+    for (auto& w : pianoWindows) w->setEnabled(false); for (auto& w : pitchWindows) w->setEnabled(false); for (auto& w : pluginWindows) w->setEnabled(false); repaint();
     worker = std::thread([safe = Component::SafePointer<Workstation>(this), work, done] {
         String message; bool ok = true; try { message = work(); } catch (const std::exception& e) { message = e.what(); ok = false; }
         MessageManager::callAsync([safe, message, ok, done] { if (!safe) return; safe->busy = false; safe->setEnabled(true); safe->status = message;
-            for (auto& w : safe->pianoWindows) w->setEnabled(true); for (auto& w : safe->pluginWindows) w->setEnabled(true);
+            for (auto& w : safe->pianoWindows) w->setEnabled(true); for (auto& w : safe->pitchWindows) w->setEnabled(true); for (auto& w : safe->pluginWindows) w->setEnabled(true);
             if (ok && done) done(); if (!ok) safe->error(message); safe->refresh(); });
     });
 }
 void Workstation::exportAudio() {
     if (engine.recording) { error("Stop recording before exporting."); return; }
+    if (blockForPitchEdits()) return;
     const double startDefault = hasTimeSelection ? timeSelection.getStart() : 0;
     const double endDefault = hasTimeSelection ? timeSelection.getEnd() : jmax(1.0, engine.duration()) + 2;
     auto* dialog = new AlertWindow("Export audio", hasTimeSelection ? "Export the selected time range as stereo WAV or MP3." : "Stereo WAV or MP3. Extend End to include effect tails.", MessageBoxIconType::NoIcon);

@@ -22,7 +22,7 @@ void runCutTests(const File& directory, StringArray& passed) {
                           1, 0, 0, 0, 0, &timeline, &timeline, now, point, now, 1, false);
     };
     auto click = [&](double seconds, int modifiers = 0) { auto e = event(seconds, modifiers); timeline.mouseDown(e); timeline.mouseUp(e); };
-    workstation.keyPressed(KeyPress('C')); check(timeline.isCutMode(), "C enables the cut tool without adding toolbar buttons");
+    workstation.keyPressed(KeyPress('C')); check(timeline.isCutMode(), "C enables the cut tool and its fixed ruler controls");
     timeline.mouseMove(event(2.62));
     click(2.62);
     check(clips.size() == 2 && near(clips[0].length, 0.5) && near(clips[1].start, 2.5) && near(clips[1].offset, 0.75)

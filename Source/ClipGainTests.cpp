@@ -59,7 +59,7 @@ void runClipGainTests(const File& directory, StringArray& passed) {
     check(approx(clips[0].gainDb, -6.5) && approx(clips[1].gainDb, 0), "Numeric Apply sets the exact target part volume in dB");
     workstation.showClipGainDialog(trackId, firstId); dismiss("Cancel", "-12");
     check(approx(clips[0].gainDb, -6.5), "Cancelling numeric volume leaves the original part level unchanged");
-    check(!workstation.setClipGain(trackId, firstId, std::numeric_limits<double>::quiet_NaN()) && !workstation.setClipGain(trackId, firstId, 13)
+    check(!workstation.setClipGain(trackId, firstId, std::numeric_limits<double>::quiet_NaN()) && !workstation.setClipGain(trackId, firstId, 61)
           && !workstation.setClipGain(trackId, "missing", -3), "Invalid dB values and stale part IDs cannot change another clip");
     workstation.cutClipAt(0, 0, 1);
     check(clips.size() == 3 && approx(clips[0].gainDb, -6.5) && approx(clips[2].gainDb, -6.5), "Cut parts inherit their original clip volume");
@@ -81,9 +81,9 @@ void runClipGainTests(const File& directory, StringArray& passed) {
     timeline.mouseDown(event(wave, wave)); timeline.mouseDrag(event(wave.translated(0, 500), wave)); timeline.mouseUp(event(wave.translated(0, 500), wave));
     check(approx(clips[0].gainDb, -60) && approx(clips[0].start, 0), "Dragging down clamps part gain at -60 dB without moving tracks");
     timeline.mouseDown(event(wave, wave)); timeline.mouseDrag(event(wave.translated(0, -1000), wave)); timeline.mouseUp(event(wave.translated(0, -1000), wave));
-    check(approx(clips[0].gainDb, 12) && approx(clips[0].start, 0), "Dragging up clamps part gain at +12 dB");
+    check(approx(clips[0].gainDb, 60) && approx(clips[0].start, 0), "Dragging up clamps part gain at +60 dB");
     timeline.mouseDown(event(wave, wave)); timeline.mouseDrag(event(wave.translated(70, 0), wave)); timeline.mouseUp(event(wave.translated(70, 0), wave));
-    check(approx(clips[0].start, 0.5) && approx(clips[0].gainDb, 12), "Horizontal waveform dragging still moves a clip without changing volume"); workstation.undoEdit();
+    check(approx(clips[0].start, 0.5) && approx(clips[0].gainDb, 60), "Horizontal waveform dragging still moves a clip without changing volume"); workstation.undoEdit();
     engine.recording = true; check(!workstation.setClipGain(trackId, firstId, 0), "Recording blocks part volume edits"); engine.recording = false;
     workstation.setClipGain(trackId, firstId, -6.5); timeline.selectedClip = 0; workstation.refresh();
     if (auto stream = directory.getChildFile("clip-gain-preview.png").createOutputStream()) {

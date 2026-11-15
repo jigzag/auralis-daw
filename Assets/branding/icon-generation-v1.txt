@@ -1,0 +1,9 @@
+Auralis application icon generation
+Mode: built-in image_gen via imagegen skill
+Reference: Assets/branding/auralis-logo-dark-v1.png
+Selected asset: Assets/branding/auralis-icon-v1.png
+Output: RGBA PNG. Rounded navy tile with transparent outer corners.
+Windows conversion: JUCE juceaide winicon creates 16, 32, 48 and 256 pixel ICO entries; CMake embeds them in the executable. The generated ICO is also supplied as Auralis.ico with the portable release.
+
+Final prompt:
+Use case: logo-brand. Asset type: final production Windows application icon for the Auralis audio workstation. Image 1 is the existing Auralis brand reference: reuse its distinctive mint waveform-shaped capital A symbol; omit the AURALIS wordmark completely. Create ONE square 1024x1024 app icon, a flat very dark navy #11151B rounded-square tile with subtly rounded corners and genuinely transparent pixels outside the tile. Center a large bold flat mint #80E3C0 waveform-A emblem, matching the reference identity: rounded central A peak, crisp triangular negative-space counter, smooth wave troughs and short wave tails on both sides. The emblem should occupy about 80% of tile width and be optically centered, bold and extremely legible at 16-64 pixels, with an enlarged central A and compact side tails. Pure solid fills, perfectly smooth clean antialiased edges, strong contrast. No words, no typography, no border, no gradients, no lighting, no shadows, no glow, no bevel, no 3D, no grain, no noise, no texture, no extra symbols, no mockup, no presentation sheet. Return just the finished app icon.

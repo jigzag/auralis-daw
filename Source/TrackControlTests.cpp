@@ -68,6 +68,55 @@ void runTrackControlTests(const File& directory, StringArray& passed) {
     check(!engine.tracks[0]->mute && engine.tracks[0]->solo && std::abs(sample() - 0.125f * Decibels::decibelsToGain(-3.0f)) < 1e-5,
           "Track-header controls still address the correct track after another track is removed");
     engine.stop();
-    directory.getChildFile("track-control-verification.txt").replaceWithText("Verified per-track header REC/MUTE/SOLO placement, audio mix effects, raw recording routing, recording-time controls, inspector state retention, and stable track identity after removal.\n");
+    {
+        Workstation monitor(false); monitor.stopTimer(); auto& e = monitor.engine;
+        e.addTrack("Backing"); e.master = 1;
+        for (int i = 0; i < 2; ++i) {
+            e.importAudio(directory.getChildFile("source.wav"), i, 0);
+            auto& t = *e.tracks[size_t(i)]; t.gain = i == 0 ? 1.0f : 0.5f;
+            t.clips[0].fadeIn = t.clips[0].fadeOut = 0;
+        }
+        monitor.refresh();
+        auto& t = *e.tracks[0];
+        auto* row = monitor.timeline.findChildWithID(t.id);
+        auto* mon = row ? dynamic_cast<TextButton*>(row->findChildWithID("monitor")) : nullptr;
+        check(mon != nullptr, "Monitor playback test finds the native MON control");
+        AudioBuffer<float> live(2, 128), mix(2, 128);
+        for (int ch = 0; ch < 2; ++ch) for (int i = 0; i < 128; ++i) live.setSample(ch, i, 0.2f);
+        auto render = [&](bool withInput = true) {
+            e.cursor = 0.25; e.play();
+            e.render(mix.getArrayOfWritePointers(), 2, 128, withInput ? live.getArrayOfReadPointers() : nullptr, withInput ? 2 : 0);
+            return mix.getSample(0, 40);
+        };
+        check(std::abs(render() - 0.375f) < 1e-6, "MON off plays clips without including live input");
+        mon->onClick();
+        check(t.monitor && !t.mute && std::abs(render() - 0.325f) < 1e-6,
+              "MON on replaces only its track's clips with live input and preserves other tracks");
+        check(std::abs(render(false) - 0.125f) < 1e-6, "MON on keeps its clips silent even when no input is available");
+        t.mute = true;
+        check(std::abs(render() - 0.125f) < 1e-6, "Explicit MUTE still silences the monitored input");
+        t.mute = false; t.solo = true;
+        check(std::abs(render() - 0.2f) < 1e-6, "SOLO includes the monitored input without restoring its clips");
+        t.solo = false;
+        e.stop(); e.render(mix.getArrayOfWritePointers(), 2, 128, live.getArrayOfReadPointers(), 2);
+        check(std::abs(mix.getSample(0, 40) - 0.2f) < 1e-6, "MON remains audible while transport is stopped");
+        const auto wavFile = directory.getChildFile("monitor-clips-export.wav"); e.exportWav(wavFile, 0.1, 0.2, 32);
+        std::unique_ptr<AudioFormatReader> reader(e.formats.createReaderFor(wavFile)); AudioBuffer<float> exported(2, 4800);
+        check(reader && reader->read(&exported, 0, 4800, 0, true, true) && std::abs(exported.getSample(0, 40) - 0.375f) < 1e-6 && t.monitor,
+              "Export includes clips from MON-enabled tracks and preserves the monitoring switch");
+        mon->onClick();
+        check(!t.monitor && !t.mute && std::abs(render() - 0.375f) < 1e-6, "MON off immediately restores clip playback without changing MUTE");
+        t.mute = true; mon->onClick(); mon->onClick();
+        check(t.mute, "Toggling MON preserves a pre-existing explicit MUTE state");
+        t.mute = false; mon->onClick(); e.stop(); e.seek(0.25); t.armed = true;
+        e.recordingDirectory = directory.getChildFile("MonitorOnlyRecordings"); e.startRecordingWriters();
+        e.render(mix.getArrayOfWritePointers(), 2, 128, live.getArrayOfReadPointers(), 2);
+        check(std::abs(mix.getSample(0, 40) - 0.325f) < 1e-6, "Recording with MON hears live input and backing without the existing take");
+        e.finishRecording();
+        const auto& recorded = t.clips.back().source->samples;
+        check(recorded.getNumSamples() == 128 && std::abs(recorded.getSample(0, 40) - 0.2f) < 1e-6,
+              "MON clip suppression preserves every raw recorded input sample");
+    }
+    directory.getChildFile("track-control-verification.txt").replaceWithText("Verified per-track header REC/MUTE/SOLO placement, audio mix effects, raw recording routing, recording-time controls, inspector state retention, stable track identity after removal, MON input-only playback, missing-input silence, explicit mute/solo, stopped monitoring, export with MON enabled, toggle restoration and recording over an existing take. Synthetic/offline only.\n");
 }
 }

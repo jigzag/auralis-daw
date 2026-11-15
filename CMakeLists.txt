@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(Auralis VERSION 0.4.20 LANGUAGES C CXX)
+project(Auralis VERSION 0.4.31 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 add_subdirectory(vendor/JUCE)
@@ -9,7 +9,8 @@ add_library(AuralisMp3 STATIC ${lame_sources} vendor/lame-3.100/libmp3lame/vecto
 target_include_directories(AuralisMp3 PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/lame-config vendor/lame-3.100/libmp3lame PUBLIC vendor/lame-3.100/include)
 target_compile_definitions(AuralisMp3 PRIVATE HAVE_CONFIG_H=1 _CRT_SECURE_NO_WARNINGS)
 target_compile_options(AuralisMp3 PRIVATE /w)
-juce_add_gui_app(Auralis PRODUCT_NAME "Auralis" COMPANY_NAME "Auralis" VERSION ${PROJECT_VERSION})
+juce_add_gui_app(Auralis PRODUCT_NAME "Auralis" COMPANY_NAME "Auralis" VERSION ${PROJECT_VERSION}
+  ICON_BIG Assets/branding/auralis-icon-v1.png ICON_SMALL Assets/branding/auralis-icon-v1.png)
 if(WIN32)
   # JUCE 8.0.6 omits the Info.txt dependency, leaving version resources stale after an upgrade.
   get_target_property(auralis_info Auralis JUCE_INFO_FILE)
@@ -20,7 +21,7 @@ juce_generate_juce_header(Auralis)
 juce_add_binary_data(AuralisBranding NAMESPACE AuralisBranding HEADER_NAME BrandingData.h
   SOURCES Assets/branding/auralis-logo-dark-v1.png)
 target_link_libraries(Auralis PRIVATE AuralisBranding AuralisMp3)
-target_sources(Auralis PRIVATE Source/Main.cpp Source/Engine.cpp Source/Midi.cpp Source/MidiTests.cpp Source/RealtimeTests.cpp Source/PianoEditTests.cpp Source/TrackControlTests.cpp Source/RecordingRangeTests.cpp Source/CutTests.cpp Source/RangeExportTests.cpp Source/ProjectOpenTests.cpp Source/TrackDeleteTests.cpp Source/ClipGainTests.cpp Source/ClipTrimTests.cpp Source/OverlapTests.cpp Source/LoopTests.cpp Source/OverlapTrimTests.cpp Source/RecordingAlignmentTests.cpp Source/RecordingWaveformTests.cpp Source/PluginRegistryTests.cpp Source/TimelineLaneTests.cpp Source/Mixer.cpp Source/MixerTests.cpp Source/ProjectStart.cpp Source/RecentProjectTests.cpp Source/PianoRoll.cpp Source/Interface.cpp Source/TrackDetails.cpp Source/PluginInfo.cpp Source/PluginInfoTests.cpp Source/MasterInsertTests.cpp Source/TrackDetailsTests.cpp Source/FollowTests.cpp Source/TrackDragTests.cpp Source/FixedRulerTests.cpp Source/SelfTest.cpp)
+target_sources(Auralis PRIVATE Source/Main.cpp Source/Engine.cpp Source/Midi.cpp Source/MidiTests.cpp Source/RealtimeTests.cpp Source/PianoEditTests.cpp Source/TrackControlTests.cpp Source/RecordingRangeTests.cpp Source/CutTests.cpp Source/CutFocusTests.cpp Source/RangeExportTests.cpp Source/ProjectOpenTests.cpp Source/TrackDeleteTests.cpp Source/ClipGainTests.cpp Source/ClipTrimTests.cpp Source/OverlapTests.cpp Source/LoopTests.cpp Source/OverlapTrimTests.cpp Source/RecordingAlignmentTests.cpp Source/RecordingWaveformTests.cpp Source/PluginRegistryTests.cpp Source/TimelineLaneTests.cpp Source/Mixer.cpp Source/MixerTests.cpp Source/ProjectStart.cpp Source/RecentProjectTests.cpp Source/PianoRoll.cpp Source/Interface.cpp Source/TrackDetails.cpp Source/PluginInfo.cpp Source/PluginInfoTests.cpp Source/MasterInsertTests.cpp Source/Normalize.cpp Source/NormalizeTests.cpp Source/PitchProcess.cpp Source/PitchInterface.cpp Source/PitchCorrectionTests.cpp Source/PitchSegments.cpp Source/PitchRoll.cpp Source/PitchRollGrid.cpp Source/PitchRollHost.cpp Source/PitchRollTests.cpp Source/PitchPreview.cpp Source/PitchPreviewTests.cpp Source/PitchFollowTests.cpp Source/PitchScoop.cpp Source/PitchScoopTests.cpp Source/PitchCurve.cpp Source/PitchCurveTests.cpp Source/PitchZoomTests.cpp Source/PitchLoop.cpp Source/PitchLoopTests.cpp Source/TrackDetailsTests.cpp Source/FollowTests.cpp Source/TrackDragTests.cpp Source/FixedRulerTests.cpp Source/SelfTest.cpp)
 target_compile_definitions(Auralis PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_PLUGINHOST_VST3=1 JUCE_PLUGINHOST_VST=0 JUCE_ASIO=1 JUCE_REPORT_APP_USAGE=0)
 target_include_directories(Auralis PRIVATE vendor/ASIO/ASIOSDK/common)
 target_link_libraries(Auralis PRIVATE juce::juce_audio_utils juce::juce_audio_processors juce::juce_dsp juce::juce_recommended_config_flags juce::juce_recommended_lto_flags)

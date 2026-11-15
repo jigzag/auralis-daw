@@ -7,6 +7,7 @@ class Workstation;
 class PianoRollWindow;
 class MixerPanel;
 class ProjectStartPanel;
+class PitchRollWindow;
 enum class TrackControl { recordArm, mute, solo, monitor };
 class TrackControlButton : public TextButton {
 public:
@@ -110,7 +111,9 @@ private:
 
 class TimelineRuler : public Component, public SettableTooltipClient {
 public:
-    TimelineRuler(Timeline& t, Viewport& v) : timeline(t), viewport(v) { setOpaque(true); setComponentID("fixedTimelineRuler"); }
+    TimelineRuler(Timeline&, Viewport&);
+    void resized() override;
+    void syncTools(bool enabled);
     void paint(Graphics& g) override { timeline.paintRuler(g); }
     void mouseDown(const MouseEvent& e) override { timeline.mouseDown(forward(e)); repaint(); }
     void mouseDrag(const MouseEvent& e) override { timeline.mouseDrag(forward(e)); repaint(); }
@@ -125,6 +128,7 @@ private:
     MouseEvent forward(const MouseEvent& e) const { return e.getEventRelativeTo(&timeline).withNewPosition(e.position); }
     Timeline& timeline;
     Viewport& viewport;
+    TrackControlButton selectTool, cutTool;
 };
 
 class PluginWindow : public DocumentWindow {
@@ -168,6 +172,12 @@ public:
     bool selectClipById(const String& trackId, const String& clipId);
     bool setClipGain(const String& trackId, const String& clipId, double db);
     void showClipGainDialog(const String& trackId, const String& clipId);
+    bool normalizeClip(const String& trackId, const String& clipId, double targetDb = -1);
+    void showNormalizeDialog(const String& trackId, const String& clipId);
+    void showPitchCorrectionDialog(const String& trackId, const String& clipId);
+    bool startPitchCorrection(const String& trackId, const String& clipId, const PitchCorrectionSettings&, std::function<void()> after = {});
+    void showPitchRoll(const String& trackId, const String& clipId, bool reanalyse = false);
+    bool resetPitchCorrection(const String& trackId, const String& clipId);
     void importFiles(const StringArray&, int track = -1, double start = -1);
     void error(const String&);
     void requestClose(std::function<void()>);
@@ -196,6 +206,10 @@ private:
     friend void runProjectOpenTests(const File&, StringArray&);
     friend void runTrackDeleteTests(const File&, StringArray&);
     friend void runClipGainTests(const File&, StringArray&);
+    friend void runNormalizeTests(const File&, StringArray&);
+    friend void runPitchCorrectionTests(const File&, StringArray&);
+    friend void runPitchRollTests(const File&, StringArray&);
+    friend void runPitchPreviewTests(const File&, StringArray&);
     friend void runClipTrimTests(const File&, StringArray&);
     friend void runLoopTests(const File&, StringArray&);
     friend void runPluginRegistryTests(const File&, StringArray&);
@@ -234,6 +248,8 @@ private:
     std::unique_ptr<FileChooser> chooser;
     std::vector<std::unique_ptr<PluginWindow>> pluginWindows;
     std::vector<std::unique_ptr<PianoRollWindow>> pianoWindows;
+    std::vector<std::unique_ptr<PitchRollWindow>> pitchWindows;
+    bool blockForPitchEdits();
     std::unique_ptr<MidiKeyboardComponent> keys;
     ScrollBar horizontal {false};
     double followResumeAt = 0;
@@ -242,6 +258,9 @@ private:
     Component::SafePointer<AlertWindow> savePrompt;
     Component::SafePointer<AlertWindow> trackRemovalPrompt;
     Component::SafePointer<AlertWindow> clipGainPrompt;
+    Component::SafePointer<AlertWindow> normalizePrompt;
+    Component::SafePointer<AlertWindow> pitchPrompt;
+    bool installPitchCorrection(const String&, const String&, const Clip&, const PitchCorrectionSettings&, const std::shared_ptr<SourceAudio>&);
     String trackMenuTarget;
     bool removeTrackById(String);
     KnownPluginList knownPlugins;

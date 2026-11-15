@@ -31,10 +31,37 @@ struct CapturedMidi {
     std::array<uint8, 3> data {};
     int size = 0;
 };
+struct PitchScoop {
+    bool enabled = false;
+    double start = 0, depthCents = 100, durationMs = 150, curve = 1;
+    bool operator==(const PitchScoop&) const = default;
+};
+using PitchPreviewCurve = std::vector<std::array<double, 2>>;
+struct PitchCurvePoint {
+    double seconds = 0, note = 60;
+    bool operator==(const PitchCurvePoint&) const = default;
+};
+struct PitchNoteEdit {
+    double start = 0, end = 0, original = 60, target = 60;
+    PitchScoop scoop;
+    std::vector<PitchCurvePoint> curve;
+    bool operator==(const PitchNoteEdit&) const = default;
+};
+struct PitchCorrectionSettings {
+    int root = 0, scale = 0, targetNote = -1;
+    double referenceHz = 440, amount = 0.75, speedMs = 80, maxCents = 200;
+    bool preserveFormants = true;
+    bool manual = false;
+    std::vector<PitchNoteEdit> notes;
+    bool valid() const;
+    bool operator==(const PitchCorrectionSettings&) const = default;
+};
 struct Clip {
     String id = Uuid().toString();
     int64 order = 0;
     std::shared_ptr<SourceAudio> source;
+    std::shared_ptr<SourceAudio> pitchOriginal;
+    PitchCorrectionSettings pitchSettings;
     double start = 0, offset = 0, length = 0;
     double fadeIn = 0.005, fadeOut = 0.005;
     float gainDb = 0;
@@ -104,6 +131,7 @@ public:
     std::atomic<bool> playing {false}, recording {false}, exporting {false};
     std::atomic<double> cursor {0}, rate {48000}, bpm {120};
     std::atomic<float> master {0.8f}, outputPeak {0};
+    std::atomic<bool> pitchPreviewActive {false};
     std::atomic<int> dropped {0}, clipped {0};
     std::atomic<int> lockMisses {0}, oversizedBlocks {0}, xrunBaseline {0};
     std::atomic<int> inputLatencySamples {0}, outputLatencySamples {0};
@@ -142,6 +170,13 @@ public:
     void play();
     void stop();
     void seek(double);
+    bool startPitchPreview(const String& ownerId, const String& trackId, std::shared_ptr<SourceAudio>, double start, double end, double semitones, float gainDb = 0, double position = -1, std::shared_ptr<const PitchPreviewCurve> = {});
+    void updatePitchPreview(const String& ownerId, double semitones);
+    void updatePitchPreviewCurve(const String& ownerId, std::shared_ptr<const PitchPreviewCurve>);
+    void stopPitchPreview(const String& ownerId = {}, bool immediate = false);
+    bool setPitchLoop(const String& ownerId, double start, double end);
+    void clearPitchLoop(const String& ownerId = {});
+    bool ownsPitchLoop(const String& ownerId);
     void beginRecording();
     void finishRecording();
     void addPlugin(int track, const PluginDescription&, const MemoryBlock* state = nullptr);
@@ -178,6 +213,19 @@ private:
     void renderChunk(float* const*, int outputs, int n, const float* const*, int inputs);
     AudioBuffer<float> capture {2, 8192};
     AudioBuffer<float> masterWork {2, 8192};
+    struct PitchPreviewState {
+        String ownerId, trackId;
+        std::shared_ptr<SourceAudio> source;
+        std::shared_ptr<const PitchPreviewCurve> curve;
+        double first = 0, last = 0, position = 0, ratio = 1, targetRatio = 1;
+        float gain = 1, envelope = 0;
+        bool releasing = false;
+    } pitchPreview;
+    int pitchPreviewResumeFade = 0;
+    String pitchLoopOwner;
+    std::atomic<bool> pitchLoopActive {false};
+    std::atomic<double> pitchLoopStart {0}, pitchLoopEnd {0};
+    bool renderPitchPreview(float* const*, int outputs, int count);
     MidiBuffer masterMidi;
     MidiBuffer midiScratch;
     MidiBuffer externalMidi;
@@ -201,10 +249,20 @@ void runPianoEditTests(const File&, StringArray& passed);
 void runTrackControlTests(const File&, StringArray& passed);
 void runRecordingRangeTests(const File&, StringArray& passed);
 void runCutTests(const File&, StringArray& passed);
+void runCutFocusTests(const File&, StringArray& passed);
 void runRangeExportTests(const File&, StringArray& passed);
 void runProjectOpenTests(const File&, StringArray& passed);
 void runTrackDeleteTests(const File&, StringArray& passed);
 void runClipGainTests(const File&, StringArray& passed);
+void runNormalizeTests(const File&, StringArray& passed);
+void runPitchCorrectionTests(const File&, StringArray& passed);
+void runPitchRollTests(const File&, StringArray& passed);
+void runPitchPreviewTests(const File&, StringArray& passed);
+void runPitchFollowTests(const File&, StringArray& passed);
+void runPitchScoopTests(const File&, StringArray& passed);
+void runPitchCurveTests(const File&, StringArray& passed);
+void runPitchZoomTests(const File&, StringArray& passed);
+void runPitchLoopTests(const File&, StringArray& passed);
 void runClipTrimTests(const File&, StringArray& passed);
 void runOverlapTests(const File&, StringArray& passed);
 void runLoopTests(const File&, StringArray& passed);
