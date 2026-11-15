@@ -91,7 +91,7 @@ int runSelfTests(const File& directory) {
             engine.tracks[0]->inserts[0]->bypass = true; engine.cursor = 0.5; engine.render(output.getArrayOfWritePointers(), 2, 512);
             check(std::abs(output.getSample(0, 100) - 0.25f) < 1e-4, "VST3 bypass leaves source audio unprocessed");
             engine.tracks[0]->inserts[0]->bypass = false;
-            engine.stop(); engine.saveProject(project); Engine withPlugin; withPlugin.loadProject(project);
+            engine.stop(); engine.saveProject(project); Engine withPlugin; withPlugin.loadProject(project, {true, false}); // This fixture is compiled from our own test source.
             withPlugin.cursor = 0.5; withPlugin.play(); withPlugin.render(output.getArrayOfWritePointers(), 2, 512);
             check(std::abs(output.getSample(0, 100) - 0.0625f) < 1e-4, "Project restores VST3 parameter state");
             withPlugin.stop(); withPlugin.exportWav(directory.getChildFile("plugin-mix.wav"), 0, 1.5);
@@ -138,6 +138,7 @@ int runSelfTests(const File& directory) {
         runEqualizerTests(directory, passed);
         runNativeDynamicsTests(directory, passed);
         runSpaceEffectsTests(directory, passed);
+        runProjectSafetyTests(directory, passed);
         {
             Workstation workstation(false); workstation.stopTimer(); auto& timeline = workstation.timeline;
             workstation.engine.addTrack("Long arrangement", true);

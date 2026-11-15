@@ -13,6 +13,17 @@
 namespace auralis {
 namespace {
 const Colour background(0xff11151b), panel(0xff1a2029), border(0xff2b3441), text(0xffe2e9ee), dim(0xff8d9cab), mint(0xff80e3c0);
+class ProjectTrustDialog final : public AlertWindow {
+public:
+    ProjectTrustDialog(Component* owner, const String& details)
+        : AlertWindow(String::fromUTF8("プロジェクトの読み込み確認"), String::fromUTF8("以下の外部プラグイン・素材を読み込みます。信頼できるプロジェクトの場合のみ許可してください。許可は今回の読み込みだけに適用します。"), MessageBoxIconType::NoIcon, owner) {
+        listing.setComponentID("projectRequirements"); listing.setMultiLine(true, true); listing.setReadOnly(true); listing.setCaretVisible(false); listing.setScrollbarsShown(true); listing.setEscapeAndReturnKeysConsumed(false);
+        listing.setFont(14); listing.setColour(TextEditor::backgroundColourId, background); listing.setColour(TextEditor::textColourId, Colour(0xffe2e9ee)); listing.setText(details, false); listing.setCaretPosition(0); listing.setSize(620, 180); addCustomComponent(&listing);
+    }
+    ~ProjectTrustDialog() override { removeCustomComponent(0); }
+private:
+    TextEditor listing;
+};
 String timeText(double t) { return String(int(t) / 60).paddedLeft('0', 2) + ":" + String(int(t) % 60).paddedLeft('0', 2) + "." + String(int(t * 100) % 100).paddedLeft('0', 2); }
 void label(Graphics& g, String s, Rectangle<int> r, float size = 12, Colour colour = dim) { g.setColour(colour); g.setFont(size); g.drawText(s, r, Justification::centredLeft); }
 double snapTime(const Workstation& w, double t) { double beat = 60.0 / w.engine.bpm.load(); return w.snap ? std::round(t / beat) * beat : t; }
@@ -734,6 +745,7 @@ Workstation::Workstation(bool connectDevices, const File& pluginRegistry) : time
     setSize(1400, 880); refresh(); startTimerHz(25);
 }
 Workstation::~Workstation() {
+    if (projectTrustPrompt) { projectTrustPrompt->setLookAndFeel(nullptr); projectTrustPrompt->exitModalState(0); }
     if (pitchPrompt) { pitchPrompt->setLookAndFeel(nullptr); pitchPrompt->exitModalState(0); }
     if (normalizePrompt) { normalizePrompt->setLookAndFeel(nullptr); normalizePrompt->exitModalState(0); }
     if (clipGainPrompt) { clipGainPrompt->setLookAndFeel(nullptr); clipGainPrompt->exitModalState(0); }
@@ -1295,14 +1307,32 @@ void Workstation::save(bool saveAs, std::function<void()> after) {
 }
 void Workstation::loadProjectFile(const File& file) {
     if (busy || engine.recording) return;
+    if (projectTrustPrompt) { projectTrustPrompt->toFront(true); return; }
     try {
-        pitchWindows.clear(); pianoWindows.clear(); pluginWindows.clear(); engine.loadProject(file); hasTimeSelection = false; projectFile = file;
+        const auto document = ProjectDocument::read(file);
+        if (document->pluginsToApprove().isEmpty() && document->mediaToApprove().isEmpty()) { installProject(*document, {}); return; }
+        String details;
+        if (!document->pluginsToApprove().isEmpty()) details += String::fromUTF8("外部VST（PC上のプログラムとして実行されます）\n") + document->pluginsToApprove().joinIntoString("\n\n") + "\n\n";
+        if (!document->mediaToApprove().isEmpty()) details += String::fromUTF8("プロジェクトフォルダ外の素材\n") + document->mediaToApprove().joinIntoString("\n");
+        auto* prompt = new ProjectTrustDialog(this, details);
+        prompt->setComponentID("projectTrustPrompt"); prompt->setLookAndFeel(&theme);
+        prompt->addButton(String::fromUTF8("許可して開く"), 1); prompt->addButton(String::fromUTF8("キャンセル"), 0, KeyPress(KeyPress::escapeKey)); projectTrustPrompt = prompt;
+        prompt->enterModalState(true, ModalCallbackFunction::create([safe = Component::SafePointer<Workstation>(this), document](int choice) {
+            if (!safe) return; safe->projectTrustPrompt = nullptr;
+            MessageManager::callAsync([safe, document, choice] { if (safe && choice == 1 && !safe->busy && !safe->engine.recording) safe->installProject(*document, {true, true}); });
+        }), true);
+    } catch (const std::exception& e) { error(e.what()); }
+}
+void Workstation::installProject(const ProjectDocument& document, ProjectLoadApproval approval) {
+    if (busy || engine.recording) return;
+    try {
+        pitchWindows.clear(); pianoWindows.clear(); pluginWindows.clear(); engine.loadProject(document, approval); hasTimeSelection = false; projectFile = document.file();
         undo.clear(); selectTrack(0); timeline.selectedClip = -1; timeline.setCutMode(false);
         tempo.setText(String(engine.bpm.load(), 1)); loopFrom.setText(String(engine.loopStart, 2)); loopTo.setText(String(engine.loopEnd, 2));
         masterVolume.setValue(Decibels::gainToDecibels(engine.master.load()), dontSendNotification);
         refresh(); markProjectSaved(); showProjectStart(false);
-        const bool historySaved = rememberProject(file);
-        setStatus("Opened " + file.getFileName() + (historySaved ? "" : " / Recent history could not be saved."));
+        const bool historySaved = rememberProject(document.file());
+        setStatus("Opened " + document.file().getFileName() + (historySaved ? "" : " / Recent history could not be saved."));
     } catch (const std::exception& e) { error(e.what()); }
 }
 void Workstation::openSelectedProject(const File& file) {

@@ -207,6 +207,7 @@ private:
     friend void runNativeDynamicsTests(const File&, StringArray&);
     friend void runSpaceEffectsTests(const File&, StringArray&);
     friend void runProjectOpenTests(const File&, StringArray&);
+    friend void runProjectSafetyTests(const File&, StringArray&);
     friend void runTrackDeleteTests(const File&, StringArray&);
     friend void runClipGainTests(const File&, StringArray&);
     friend void runNormalizeTests(const File&, StringArray&);
@@ -259,6 +260,7 @@ private:
     File projectFile;
     MemoryBlock savedPluginState;
     Component::SafePointer<AlertWindow> savePrompt;
+    Component::SafePointer<AlertWindow> projectTrustPrompt;
     Component::SafePointer<AlertWindow> trackRemovalPrompt;
     Component::SafePointer<AlertWindow> clipGainPrompt;
     Component::SafePointer<AlertWindow> normalizePrompt;
@@ -280,6 +282,7 @@ private:
     void saveToFile(const File&, std::function<void()> after = {});
     void openSelectedProject(const File&);
     void loadProjectFile(const File&);
+    void installProject(const ProjectDocument&, ProjectLoadApproval);
     MemoryBlock pluginStateSnapshot();
     void markProjectSaved();
     void open();

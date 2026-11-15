@@ -18,7 +18,7 @@ void runMasterInsertTests(const File& directory, StringArray& passed) {
     w.trackInsertAction({}, second, 2); check(std::abs(sample() - 0.25f) < 1e-6, "Master bypass restores the signal through the remaining active chain");
     e.masterInserts[0]->instance->getParameters()[0]->setValueNotifyingHost(0.25f); e.master = 0.5f;
     check(std::abs(sample() - 0.0625f) < 1e-6, "Master volume applies after master insert processing");
-    auto project = directory.getChildFile("master-inserts.auralis"); w.saveToFile(project); Engine loaded; loaded.loadProject(project);
+    auto project = directory.getChildFile("master-inserts.auralis"); w.saveToFile(project); Engine loaded; loaded.loadProject(project, {true, false}); // Explicit trust for our locally built TestGain fixture.
     check(loaded.masterInserts.size() == 2 && loaded.masterInserts[1]->bypass && std::abs(loaded.masterInserts[0]->instance->getParameters()[0]->getValue() - 0.25f) < 1e-6,
           "Project save and reload restore master insert order, parameter state and bypass");
     e.masterInserts[0]->instance->getParameters()[0]->setValueNotifyingHost(0.4f);

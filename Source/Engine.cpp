@@ -117,17 +117,21 @@ Track& Engine::addTrack(String name, bool midi) {
     midiDiscontinuity = true;
     return *tracks.back();
 }
-std::shared_ptr<SourceAudio> Engine::readAudio(const File& file) {
+std::shared_ptr<SourceAudio> Engine::readAudio(const File& file, int64* remainingProjectBytes) {
     std::unique_ptr<AudioFormatReader> reader(formats.createReaderFor(file));
     require(reader != nullptr, "Cannot read audio: " + file.getFullPathName());
     require(reader->lengthInSamples > 0 && reader->lengthInSamples <= 64000000,
             "Audio is empty or exceeds the 64 million sample limit per file. Split long recordings first.");
+    require(std::isfinite(reader->sampleRate) && reader->sampleRate >= 8000 && reader->sampleRate <= 768000 && reader->numChannels >= 1 && reader->numChannels <= 64, "Invalid audio sample rate or channel count.");
+    const int64 bytes = int64(jmin(2u, reader->numChannels)) * reader->lengthInSamples * int64(sizeof(float)) + ((reader->lengthInSamples + 63) / 64) * 2 * int64(sizeof(float)) + 4096;
+    require(!remainingProjectBytes || bytes <= *remainingProjectBytes, "Project decoded audio and waveforms exceed the 1 GiB memory budget.");
     auto audio = std::make_shared<SourceAudio>();
     audio->file = file;
     audio->rate = reader->sampleRate;
     audio->samples.setSize(jmin(2, int(reader->numChannels)), int(reader->lengthInSamples));
     require(reader->read(&audio->samples, 0, audio->samples.getNumSamples(), 0, true, true), "Audio read failed.");
     audio->buildWaveform();
+    if (remainingProjectBytes) *remainingProjectBytes -= bytes;
     return audio;
 }
 void Engine::importAudio(const File& file, int index, double start) {
@@ -664,10 +668,16 @@ void Engine::saveProject(const File& file) {
     set(root, "tracks", rows);
     require(file.replaceWithText(JSON::toString(root, false)), "Project could not be saved.");
 }
-void Engine::loadProject(const File& file) {
+void Engine::loadProject(const File& file, ProjectLoadApproval approval) { require(!recording, "Stop recording before opening a project."); const auto document = ProjectDocument::read(file); loadProject(*document, approval); }
+void Engine::loadProject(const ProjectDocument& document, ProjectLoadApproval approval) {
     require(!recording, "Stop recording before opening a project.");
-    var root; auto result = JSON::parse(file.loadFileAsString(), root);
-    require(result.wasOk() && root["format"].toString() == "auralis-1" && root["tracks"].isArray(), "Not an Auralis project.");
+    document.requireApproval(approval);
+    const auto& root = document.root;
+    int64 remainingBytes = ProjectLimits::audioBytes;
+    auto loadMedia = [&](const String& raw, auto& cache) {
+        const auto entry = document.media.find(raw); require(entry != document.media.end(), "Unvalidated project media path."); const auto& path = entry->second;
+        validateLocalProjectPath(path); auto& source = cache[path.getFullPathName()]; if (!source) source = readAudio(path, &remainingBytes); return source;
+    };
     // Build the complete project separately. A failed file/plugin load preserves the current session.
     Engine staging; staging.rate = rate.load(); staging.block = block;
     std::map<String, std::shared_ptr<SourceAudio>> cache;
@@ -696,7 +706,7 @@ void Engine::loadProject(const File& file) {
                     c.notes.push_back(note);
                 }
                 if (auto* events = v["events"].getArray()) for (auto& item : *events) {
-                    MemoryBlock data; data.fromBase64Encoding(item["data"].toString()); double beat = double(item["beat"]);
+                    auto data = decodeProjectBlock(item["data"].toString(), 3); double beat = double(item["beat"]);
                     require(data.getSize() > 0 && data.getSize() <= 3 && std::isfinite(beat) && beat >= 0, "Invalid MIDI controller event.");
                     MidiMessage message(data.getData(), int(data.getSize()));
                     require(message.getChannel() >= 1 && message.getChannel() <= 16 && !message.isNoteOnOrOff() && !message.isSysEx(), "Unsupported MIDI event in project.");
@@ -704,8 +714,7 @@ void Engine::loadProject(const File& file) {
                 }
                 restoreOrder(c); t.clips.push_back(c); continue;
             }
-            auto path = file.getParentDirectory().getChildFile(v["file"].toString());
-            auto& source = cache[path.getFullPathName()]; if (!source) source = readAudio(path);
+            auto source = loadMedia(v["file"].toString(), cache);
             Clip c; c.source = source; c.name = v["name"].toString();
             c.start = jmax(0.0, double(v["start"])); c.offset = jmax(0.0, double(v["offset"]));
             c.length = double(v["length"]); c.fadeIn = jmax(0.0, number(v, "fadeIn", 0.005)); c.fadeOut = jmax(0.0, number(v, "fadeOut", 0.005));
@@ -716,8 +725,7 @@ void Engine::loadProject(const File& file) {
             if (v.hasProperty("pitchCorrection")) {
                 const auto pitch = v["pitchCorrection"];
                 require(pitch.isObject() && pitch["originalFile"].toString().isNotEmpty(), "Invalid pitch correction metadata.");
-                auto originalPath = file.getParentDirectory().getChildFile(pitch["originalFile"].toString());
-                auto& original = cache[originalPath.getFullPathName()]; if (!original) original = readAudio(originalPath);
+                auto original = loadMedia(pitch["originalFile"].toString(), cache);
                 require(original->rate == source->rate && original->samples.getNumSamples() == source->samples.getNumSamples()
                         && original->samples.getNumChannels() == source->samples.getNumChannels(), "Pitch correction source dimensions do not match.");
                 auto& settings = c.pitchSettings; settings.root = int(number(pitch, "root", 0)); settings.scale = int(number(pitch, "scale", 0));
@@ -750,14 +758,14 @@ void Engine::loadProject(const File& file) {
         if (auto* list = row["plugins"].getArray()) for (auto& v : *list) {
             PluginDescription desc; auto xml = parseXML(v["xml"].toString());
             require(xml && desc.loadFromXml(*xml), "Invalid plugin description in project.");
-            MemoryBlock state; state.fromBase64Encoding(v["state"].toString());
+            auto state = decodeProjectBlock(v["state"].toString(), ProjectLimits::stateBytes); validateProjectPluginPath(desc);
             staging.rate = rate.load(); staging.block = block;
             staging.addPlugin(int(staging.tracks.size()) - 1, desc, &state); t.inserts.back()->bypass = bool(v["bypass"]);
         }
     }
     if (auto* list = root["masterPlugins"].getArray()) for (const auto& v : *list) {
         PluginDescription desc; auto xml = parseXML(v["xml"].toString()); require(xml && desc.loadFromXml(*xml), "Invalid master plugin description.");
-        MemoryBlock state; state.fromBase64Encoding(v["state"].toString()); staging.addPlugin(-1, desc, &state); staging.masterInserts.back()->bypass = bool(v["bypass"]);
+        auto state = decodeProjectBlock(v["state"].toString(), ProjectLimits::stateBytes); validateProjectPluginPath(desc); staging.addPlugin(-1, desc, &state); staging.masterInserts.back()->bypass = bool(v["bypass"]);
     }
     stop(); clearPitchLoop(); const ScopedLock guard(lock); tracks.swap(staging.tracks);
     masterInserts.swap(staging.masterInserts); for (auto& p : masterInserts) p->instance->setPlayHead(this);

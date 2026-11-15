@@ -4,6 +4,7 @@
 #include <vector>
 #include <memory>
 #include <map>
+#include "ProjectSafety.h"
 #include <array>
 
 namespace auralis {
@@ -164,7 +165,7 @@ public:
     void splitClip(int track, int clip, double atSeconds);
     bool canSplitClip(int track, int clip, double atSeconds) const;
     void quantizeClip(Clip&, double gridBeats);
-    std::shared_ptr<SourceAudio> readAudio(const File&);
+    std::shared_ptr<SourceAudio> readAudio(const File&, int64* remainingProjectBytes = nullptr);
     void importAudio(const File&, int track, double start);
     double duration() const;
     double effectTailSeconds() const;
@@ -185,7 +186,8 @@ public:
     void exportWav(const File&, double start, double end, int bits = 24);
     void exportMp3(const File&, double start, double end, int kbps = 320);
     void saveProject(const File&);
-    void loadProject(const File&);
+    void loadProject(const File&, ProjectLoadApproval = {});
+    void loadProject(const ProjectDocument&, ProjectLoadApproval = {});
     void reset();
     void render(float* const*, int numOutputs, int n, const float* const* input = nullptr, int numInputs = 0, bool collectLiveMidi = false);
     Optional<PositionInfo> getPosition() const override;
@@ -270,6 +272,7 @@ void runPitchLoopTests(const File&, StringArray& passed);
 void runEqualizerTests(const File&, StringArray& passed);
 void runNativeDynamicsTests(const File&, StringArray& passed);
 void runSpaceEffectsTests(const File&, StringArray& passed);
+void runProjectSafetyTests(const File&, StringArray& passed);
 void runClipTrimTests(const File&, StringArray& passed);
 void runOverlapTests(const File&, StringArray& passed);
 void runLoopTests(const File&, StringArray& passed);

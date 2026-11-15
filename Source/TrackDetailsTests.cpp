@@ -34,7 +34,7 @@ void runTrackDetailsTests(const File& directory, StringArray& passed) {
           "Track insert lists and bypass actions address the intended effect independently of selected track");
     check(w.trackInsertAction(first, effect, 3) && !w.trackInsertAction(first, effect, 2) && e.tracks[1]->inserts[0]->id == other,
           "Removing an insert rejects stale actions and preserves the other track's insert");
-    auto project = directory.getChildFile("track-details.auralis"); e.saveProject(project); Engine restored; restored.loadProject(project);
+    auto project = directory.getChildFile("track-details.auralis"); e.saveProject(project); Engine restored; restored.loadProject(project, {true, false}); // Trust only our compiled TestGain fixture.
     check(restored.tracks[0]->name == "Vocal input" && restored.tracks[0]->input == 2 && restored.tracks[1]->midiChannel == 16 && restored.tracks[1]->inserts.size() == 1,
           "Project save and reload preserve per-track routing, names and insert chains");
     w.engine.loadProject(File::getCurrentWorkingDirectory().getChildFile("Demo/First light.auralis")); w.refresh(); w.setTimelineZoom(55);
