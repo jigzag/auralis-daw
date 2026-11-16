@@ -219,13 +219,17 @@ PitchCorrectionResult renderPitchCorrection(const Clip& clip, const PitchCorrect
         bool needsCorrection = false;
         for (int i = beginFrame; i < endFrame; ++i) needsCorrection |= std::abs(frames[size_t(i)].shift) >= 0.005;
         beginFrame = endFrame;
-        if (!needsCorrection || runEnd - runStart < original->rate * 0.025) continue;
+        if (!needsCorrection || runEnd <= runStart) continue;
         std::vector<double> marks;
         const double firstPeriod = periodAt(runStart);
-        marks.push_back(peakAt(runStart, jmin(runEnd, runStart + int(firstPeriod * 1.5))));
-        while (marks.back() + periodAt(marks.back()) < runEnd) {
+        // A very short edited tail still needs complete input periods for PSOLA.
+        // Borrow analysis context while keeping synthesis and its wet mask local.
+        const int context = runEnd - runStart < original->rate * 0.025 ? int(std::ceil(firstPeriod * 2)) : 0;
+        const int analysisStart = jmax(0, runStart - context), analysisEnd = jmin(count, runEnd + context);
+        marks.push_back(peakAt(analysisStart, jmin(analysisEnd, analysisStart + int(firstPeriod * 1.5))));
+        while (marks.back() + periodAt(marks.back()) < analysisEnd) {
             const double period = periodAt(marks.back());
-            const double mark = peakAt(int(marks.back() + period * 0.85), jmin(runEnd, int(marks.back() + period * 1.15)));
+            const double mark = peakAt(int(marks.back() + period * 0.85), jmin(analysisEnd, int(marks.back() + period * 1.15)));
             if (mark <= marks.back() + period * 0.5) break;
             marks.push_back(mark);
         }

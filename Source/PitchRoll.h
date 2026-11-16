@@ -30,6 +30,7 @@ private:
     int clickedNote = -1;
     bool toggleOnUp = false;
     bool drawingCurve = false;
+    bool insertedCurveRegion = false;
     double curveGrabOffset = 0;
     Point<float> curveLast;
     void finishCurve(bool cancel);

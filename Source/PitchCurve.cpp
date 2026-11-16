@@ -3,15 +3,22 @@
 
 namespace auralis {
 double PitchRollPanel::curvePitchAt(int index, double time) const {
-    if (!isPositiveAndBelow(index, int(notes.size()))) return 60;
-    const auto& n = notes[size_t(index)];
     const auto next = std::lower_bound(frames.begin(), frames.end(), time - snapshot.offset, [](const auto& frame, double t) { return frame.seconds < t; });
     const PitchFrame* frame = nullptr;
     if (next != frames.end() && next->voiced) frame = &*next;
     if (next != frames.begin() && (next - 1)->voiced && (!frame || std::abs(snapshot.offset + (next - 1)->seconds - time) < std::abs(snapshot.offset + frame->seconds - time))) frame = &*(next - 1);
-    const double measured = frame ? frame->note : n.original;
+    double measured = frame ? frame->note : 60, automaticShift = frame ? frame->shift : 0;
+    if (next != frames.begin() && next != frames.end() && next->voiced && (next - 1)->voiced) {
+        const auto& before = *(next - 1);
+        const double mix = jlimit(0.0, 1.0, (time - snapshot.offset - before.seconds) / (next->seconds - before.seconds));
+        measured = before.note + (next->note - before.note) * mix;
+        automaticShift = before.shift + (next->shift - before.shift) * mix;
+    }
+    if (!isPositiveAndBelow(index, int(notes.size()))) return jlimit(24.0, 96.0, measured + (snapshot.pitchOriginal && !snapshot.pitchSettings.manual ? automaticShift : 0));
+    const auto& n = notes[size_t(index)];
+    if (!frame) measured = n.original;
     const double shift = n.edited ? pitchEditShift(measured, time, n)
-        : snapshot.pitchOriginal && !snapshot.pitchSettings.manual && frame ? frame->shift : 0;
+        : snapshot.pitchOriginal && !snapshot.pitchSettings.manual ? automaticShift : 0;
     return jlimit(24.0, 96.0, measured + shift);
 }
 

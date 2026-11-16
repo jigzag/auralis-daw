@@ -30,7 +30,7 @@ PitchRollPanel::PitchRollPanel(Workstation& w, String track, String clip, const 
     dragAudition.setTooltip(String::fromUTF8("ドラッグ中に選択音をループ試聴します。離すと停止。最終的な補正音は適用して確認できます。"));
     dragAudition.onClick = [this] { if (!dragAudition.getToggleState()) endAudition(true); };
     addAndMakeVisible(curveEdit); curveEdit.setComponentID("pitchCurveEdit"); curveEdit.setButtonText(String::fromUTF8("カーブ編集")); curveEdit.setWantsKeyboardFocus(false);
-    curveEdit.setTooltip(String::fromUTF8("緑の音程線を直接ドラッグして部分的に描き直します。横に引くと平らにできます。Ctrlで上下を微調整。"));
+    curveEdit.setTooltip(String::fromUTF8("緑の音程線を直接ドラッグして部分的に描き直します。音のブロックがない短い線や語尾も編集できます。横に引くと平らにできます。Ctrlで上下を微調整。"));
     curveEdit.onClick = [this] { endAudition(true); grid.setMouseCursor(curveEdit.getToggleState() ? MouseCursor::CrosshairCursor : MouseCursor::UpDownResizeCursor); grid.repaint(); };
     addAndMakeVisible(rangeLoop); rangeLoop.setComponentID("pitchRangeLoop"); rangeLoop.setButtonText(String::fromUTF8("範囲ループ")); rangeLoop.setWantsKeyboardFocus(false);
     rangeLoop.setTooltip(String::fromUTF8("LOOP欄をドラッグして音程調整専用の範囲を指定します。ダブルクリックで解除。プロジェクトのループ範囲は変更しません。"));

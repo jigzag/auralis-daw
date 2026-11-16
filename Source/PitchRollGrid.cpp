@@ -88,13 +88,24 @@ void PitchRollGrid::paint(Graphics& g) {
 void PitchRollGrid::mouseDown(const MouseEvent& e) {
     if (isShowing()) grabKeyboardFocus(); dragging = selecting = toggleOnUp = false;
     if (!panel.owner || panel.owner->busy || panel.owner->engine.recording || panel.stale || !panel.resolve()) return;
-    const int index = panel.curveEdit.getToggleState() ? curveNoteAt(e.position.x) : noteAt(e.position); clickedNote = index;
+    int index = panel.curveEdit.getToggleState() ? curveNoteAt(e.position.x) : noteAt(e.position); clickedNote = index;
     if (e.mods.isPopupMenu()) { if (index >= 0) { if (!panel.selected.contains(index)) panel.selected = {index}; panel.contextMenu(index, panel.snapshot.offset + e.x / pixels); } return; }
     if (!e.mods.isLeftButtonDown()) return;
     origin = e.position; selectionBefore = panel.selected;
     if (panel.curveEdit.getToggleState()) {
+        dragBefore = panel.notes; insertedCurveRegion = false;
+        if (index < 0) {
+            const double time = panel.snapshot.offset + e.position.x / pixels;
+            if (auto region = uncoveredPitchRegion(panel.snapshot, panel.frames, panel.notes, time)) {
+                const double lineNote = panel.curvePitchAt(-1, time);
+                if (std::abs((highest - lineNote + 0.5) * row - e.position.y) <= 12) {
+                    auto at = std::lower_bound(panel.notes.begin(), panel.notes.end(), region->start, [](const auto& n, double t) { return n.start < t; });
+                    index = int(at - panel.notes.begin()); panel.notes.insert(at, *region); insertedCurveRegion = true; clickedNote = index;
+                }
+            }
+        }
         if (index < 0) return;
-        panel.selected = {index}; drawingCurve = true; dragBefore = panel.notes; curveLast = e.position;
+        panel.selected = {index}; drawingCurve = true; curveLast = e.position;
         const double time = panel.snapshot.offset + e.position.x / pixels;
         const double lineY = (highest - panel.curvePitchAt(index, time)) * row + row * 0.5;
         curveGrabOffset = std::abs(lineY - e.position.y) <= 12 ? lineY - e.position.y : 0;
@@ -142,9 +153,9 @@ void PitchRollGrid::mouseUp(const MouseEvent&) {
 void PitchRollGrid::mouseDoubleClick(const MouseEvent& e) { if (panel.curveEdit.getToggleState()) return; const int i = noteAt(e.position); if (i >= 0 && !panel.owner->busy) { panel.selected = {i}; panel.snapSelected(); } }
 void PitchRollGrid::finishCurve(bool cancel) {
     panel.endAudition(cancel);
-    if (cancel) panel.notes = dragBefore;
+    if (cancel || (insertedCurveRegion && !panel.notes[size_t(clickedNote)].edited)) { panel.notes = dragBefore; panel.selected = selectionBefore; }
     else if (dragBefore != panel.notes) { panel.undo.push_back(std::move(dragBefore)); if (panel.undo.size() > 80) panel.undo.erase(panel.undo.begin()); panel.redo.clear(); }
-    drawingCurve = false; dragBefore.clear(); panel.changed();
+    drawingCurve = insertedCurveRegion = false; dragBefore.clear(); panel.changed();
 }
 void PitchRollGrid::focusLost(FocusChangeType) { if (drawingCurve) finishCurve(true); panel.endAudition(true); panel.finishSeek(); panel.finishLoop(true); }
 void PitchRollGrid::mouseWheelMove(const MouseEvent& e, const MouseWheelDetails& wheel) {

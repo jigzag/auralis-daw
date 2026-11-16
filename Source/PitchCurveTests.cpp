@@ -74,6 +74,76 @@ void runPitchCurveTests(const File& directory, StringArray& passed) {
     e.recording = true; const auto protectedNotes = p.notes; grid.mouseDown(event(a, a)); grid.mouseDrag(event(b, a)); check(p.notes == protectedNotes && !p.apply(), "Recording blocks direct curve edits and application"); e.recording = false;
     p.fit(); if (auto stream = directory.getChildFile("pitch-curve-preview.png").createOutputStream()) { stream->setPosition(0); stream->truncate(); PNGImageFormat().writeImageToStream(p.createComponentSnapshot(p.getLocalBounds()), *stream); }
     check(w.resetPitchCorrection(e.tracks[0]->id, originalId) && clip.source == original, "Reset pitch correction restores original audio after direct curve editing");
+    // Reproduce a stable note followed by an unboxed tail, a silent gap and a
+    // separate 20 ms voiced fragment. All times remain relative to the source.
+    std::vector<PitchFrame> fragments;
+    for (int i = 0; i <= 150; ++i) fragments.push_back({i * 0.01, i >= 70 && i <= 73 ? 72.0 : 69.0, 0, 0.1,
+        (i >= 10 && i <= 73) || i == 100 || i == 101});
+    auto sloped = fragments; for (int i = 70; i <= 73; ++i) sloped[size_t(i)].note = 72 + (i - 70) * 0.2;
+    p.setAnalysis(clip, sloped); grid.pixels = 700; const int oldRow = grid.row; grid.row = 704; p.updateSize();
+    const auto betweenFrames = point(0.965, 72.3); grid.mouseDown(event(betweenFrames, betweenFrames));
+    check(grid.interacting(), "At maximum vertical zoom an unboxed sloping line is grabbed between analysis frames"); grid.mouseUp(event(betweenFrames, betweenFrames));
+    grid.row = oldRow; p.setAnalysis(clip, fragments); p.updateSize();
+    const auto boxed = p.notes;
+    check(boxed.size() == 1 && !uncoveredPitchRegion(clip, fragments, boxed, 0.65), "Existing note blocks retain their boundaries when exposing unboxed pitch lines");
+    const auto tail = uncoveredPitchRegion(clip, fragments, boxed, 0.96);
+    check(tail && std::abs(tail->start - 0.945) < 1e-7 && std::abs(tail->end - 0.985) < 1e-7,
+          "An unboxed voiced tail is editable up to its actual detection boundary without overlapping the preceding note");
+    check(!uncoveredPitchRegion(clip, fragments, boxed, 1.1) && !uncoveredPitchRegion(clip, fragments, boxed, 0.1)
+          && !uncoveredPitchRegion(clip, fragments, boxed, 1.8), "Silence and times outside a trimmed part never create a pitch region");
+    const auto tailPoint = point(0.96, 72), tailMoved = tailPoint.translated(0, -float(grid.row));
+    grid.mouseDown(event(tailPoint, tailPoint)); grid.mouseUp(event(tailPoint, tailPoint));
+    check(p.notes == boxed && !p.hasPendingEdits() && p.undo.empty(), "Clicking an unboxed line without dragging leaves no edit or phantom note");
+    grid.mouseDown(event(tailPoint, tailPoint)); grid.mouseDrag(event(tailMoved, tailPoint)); grid.keyPressed(KeyPress(KeyPress::escapeKey));
+    check(p.notes == boxed && !p.hasPendingEdits() && !grid.interacting(), "Escape removes a newly created tail region and its partial curve");
+    grid.mouseDown(event(tailPoint, tailPoint)); grid.mouseDrag(event(tailMoved, tailPoint)); grid.focusLost(Component::focusChangedDirectly);
+    check(p.notes == boxed && !p.hasPendingEdits(), "Focus cancellation restores an unboxed region without leaving stale note indices");
+    grid.mouseDown(event(tailPoint, tailPoint));
+    check(grid.interacting() && e.pitchPreviewActive, "Grabbing a line outside a note block starts direct editing and drag audition");
+    grid.mouseDrag(event(tailMoved, tailPoint)); grid.mouseUp(event(tailMoved, tailPoint));
+    const auto editedTail = p.notes;
+    check(p.notes.size() == 2 && p.notes[0] == boxed[0] && !p.notes[1].curve.empty() && p.settings().valid()
+          && std::abs(p.curvePitchAt(1, 0.96) - 73) < 0.01, "Dragging an unboxed tail stages its own curve while preserving the neighbouring note");
+    p.undoLocal(); check(p.notes == boxed && !p.hasPendingEdits(), "A single Undo removes both the unboxed region and its curve stroke");
+    p.redoLocal(); check(p.notes == editedTail, "Redo restores an unboxed curve with its source-relative boundaries");
+    const auto silent = point(1.1, 69); grid.mouseDown(event(silent, silent)); grid.mouseDrag(event(silent.translated(0, -22), silent)); grid.mouseUp(event(silent, silent));
+    check(p.notes == editedTail && !grid.interacting(), "Dragging true silence cannot fabricate a detected pitch or alter adjacent curves");
+    const auto island = point(1.25, 69), islandMoved = island.translated(0, -float(grid.row));
+    grid.mouseDown(event(island, island)); grid.mouseDrag(event(islandMoved, island, ModifierKeys::ctrlModifier)); grid.mouseUp(event(islandMoved, island));
+    check(p.notes.size() == 3 && std::abs(p.curvePitchAt(2, 1.25) - 69.1) < 0.025 && p.settings().valid(),
+          "A standalone pitch fragment shorter than note detection supports fine Ctrl-drag editing");
+    const auto fragmentSettings = p.settings(); auto saved = clip; saved.pitchSettings = fragmentSettings;
+    const auto restoredFragments = pitchSegments(saved, fragments);
+    check(restoredFragments.size() == 3 && restoredFragments[1].curve == p.notes[1].curve && restoredFragments[2].curve == p.notes[2].curve,
+          "Re-analysis reconstructs saved unboxed tails and short islands instead of discarding their curves");
+    check(p.apply(), "Applying unboxed curve edits renders the original source in the background"); wait();
+    bool shortChanged = false, surroundingDry = true;
+    for (int ch = 0; ch < 2; ++ch) for (int i = 0; i < original->samples.getNumSamples(); ++i) {
+        const double time = i / original->rate;
+        const bool different = clip.source->samples.getSample(ch, i) != original->samples.getSample(ch, i);
+        if (time >= 1.245 && time < 1.265) shortChanged |= different;
+        if (time < 0.93 || (time > 1.0 && time < 1.23) || time > 1.28) surroundingDry &= !different;
+    }
+    check(shortChanged && surroundingDry && clip.pitchOriginal == original, "A 20 ms fragment changes rendered samples while all surrounding undrawn audio stays identical");
+    check(p.notes.size() == 3 && !p.hasPendingEdits() && p.notes[1].curve == fragmentSettings.notes[0].curve,
+          "Apply retains unboxed curve regions in the editor after refreshing its baseline");
+    auto fragmentProject = directory.getChildFile("pitch-unboxed-project.auralis"); e.saveProject(fragmentProject); Engine fragmentLoaded; fragmentLoaded.loadProject(fragmentProject);
+    auto reopenedSettings = fragmentLoaded.tracks[0]->clips[0].pitchSettings, expectedSettings = fragmentSettings;
+    bool sameCurves = reopenedSettings.notes.size() == expectedSettings.notes.size();
+    for (size_t i = 0; sameCurves && i < expectedSettings.notes.size(); ++i) {
+        const auto& a = reopenedSettings.notes[i]; const auto& b = expectedSettings.notes[i];
+        sameCurves = std::abs(a.start - b.start) < 1e-12 && std::abs(a.end - b.end) < 1e-12
+            && std::abs(a.original - b.original) < 1e-12 && std::abs(a.target - b.target) < 1e-12 && a.scoop == b.scoop && a.curve.size() == b.curve.size();
+        for (size_t j = 0; sameCurves && j < b.curve.size(); ++j) sameCurves = std::abs(a.curve[j].seconds - b.curve[j].seconds) < 1e-12 && std::abs(a.curve[j].note - b.curve[j].note) < 1e-12;
+    }
+    reopenedSettings.notes.clear(); expectedSettings.notes.clear();
+    check(sameCurves && reopenedSettings == expectedSettings && fragmentLoaded.tracks[0]->clips[0].offset == 0.25
+          && fragmentLoaded.tracks[0]->clips[0].start == 12.5, "Saving and reopening a moved, trimmed part preserves unboxed pitch edits");
+    if (auto stream = directory.getChildFile("pitch-unboxed-preview.png").createOutputStream()) {
+        p.viewport.setViewPosition(420, int((PitchRollGrid::highest - 73) * grid.row));
+        stream->setPosition(0); stream->truncate(); PNGImageFormat().writeImageToStream(p.createComponentSnapshot(p.getLocalBounds()), *stream);
+    }
+    directory.getChildFile("pitch-unboxed-verification.txt").replaceWithText("Synthetic/offline only. Verified direct grabbing of unboxed voiced tails and isolated short fragments, silence/trim boundaries, click without mutation, Escape/focus cancellation, scoped edits and audition, Undo/Redo, fine Ctrl-drag, re-analysis/Apply/project persistence, and rendering of a 20 ms edit with sample-identical surrounding audio. No audio hardware opened.\n");
     check(!e.devices.getCurrentAudioDevice() && !loaded.devices.getCurrentAudioDevice(), "Direct pitch-curve tests never open real audio hardware");
     directory.getChildFile("pitch-curve-verification.txt").replaceWithText("Synthetic/offline only. Verified native line grabbing/drawing, scoped vibrato flattening, live preview and preserved transport, stroke undo/redo, Escape/focus cancellation, fine Ctrl-drag, whole-note transposition, metadata validation, background rendering with measured pitch, sample-identical undrawn audio, split/re-analysis/persistence on moved and trimmed parts, selected-note restore, full reset and recording guards.\n");
 }

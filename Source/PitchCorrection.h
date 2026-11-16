@@ -1,5 +1,6 @@
 #pragma once
 #include "Engine.h"
+#include <optional>
 
 namespace auralis {
 struct PitchFrame {
@@ -20,6 +21,7 @@ struct PitchCorrectionResult {
 };
 std::vector<PitchFrame> analysePitch(const Clip&, const PitchCorrectionSettings&);
 std::vector<PitchSegment> pitchSegments(const Clip&, const std::vector<PitchFrame>&);
+std::optional<PitchSegment> uncoveredPitchRegion(const Clip&, const std::vector<PitchFrame>&, const std::vector<PitchSegment>&, double sourceSeconds);
 double pitchEditShift(double measuredNote, double sourceSeconds, const PitchNoteEdit&);
 double pitchEditShift(double measuredNote, double sourceSeconds, const PitchSegment&);
 PitchCorrectionResult renderPitchCorrection(const Clip&, const PitchCorrectionSettings&, const File& output);
