@@ -73,11 +73,11 @@ void PitchRollGrid::paint(Graphics& g) {
     }
     if (panel.curveEdit.getToggleState()) {
         g.setColour(Colour(0xffb7ffe3));
-        for (const auto& n : panel.notes) { double previousX = -1e10; for (const auto& point : n.curve) {
+        for (const auto& n : panel.notes) { double previousX = -1e10, previousTime = -1e10; for (const auto& point : n.curve) {
             if (point.seconds < n.start || point.seconds > n.end) continue;
             const float x = float((point.seconds - panel.snapshot.offset) * pixels), y = float((highest - point.note) * row + row * 0.5);
-            if (x < visible.getX() || x > visible.getRight() || x - previousX < 18) continue;
-            previousX = x; g.fillEllipse(x - 2, y - 2, 4, 4);
+            if (x < visible.getX() || x > visible.getRight() || x - previousX < 36 || point.seconds - previousTime < 0.08) continue;
+            previousX = x; previousTime = point.seconds; g.fillEllipse(x - 2, y - 2, 4, 4);
         } }
     }
     if (panel.owner) {
@@ -105,10 +105,12 @@ void PitchRollGrid::mouseDown(const MouseEvent& e) {
             }
         }
         if (index < 0) return;
-        panel.selected = {index}; drawingCurve = true; curveLast = e.position;
+        panel.selected = {index}; drawingCurve = true;
         const double time = panel.snapshot.offset + e.position.x / pixels;
         const double lineY = (highest - panel.curvePitchAt(index, time)) * row + row * 0.5;
         curveGrabOffset = std::abs(lineY - e.position.y) <= 12 ? lineY - e.position.y : 0;
+        curveBase = panel.notes[size_t(index)]; curveAnchorTime = time;
+        curveStroke = {{time, highest + 0.5 - (e.position.y + curveGrabOffset) / row}};
         panel.beginAudition(index, time); panel.showSelectedMessage(); repaint(); return;
     }
     if (index < 0) { if (!e.mods.isCtrlDown()) panel.selected.clear(); selecting = true; repaint(); return; }
@@ -123,8 +125,12 @@ void PitchRollGrid::mouseDrag(const MouseEvent& e) {
         const float y = origin.y + (e.position.y - origin.y) * (e.mods.isCtrlDown() ? 0.1f : 1.0f);
         const auto point = Point<float>(e.position.x, y);
         const auto pitch = [&](float value) { return highest + 0.5 - (value + curveGrabOffset) / row; };
-        if (panel.drawCurve(clickedNote, panel.snapshot.offset + curveLast.x / pixels, pitch(curveLast.y), panel.snapshot.offset + point.x / pixels, pitch(point.y))) { panel.changed(); panel.updateAudition(); }
-        curveLast = point; return;
+        const double time = jlimit(curveBase.start, curveBase.end, curveAnchorTime + std::round((panel.snapshot.offset + point.x / pixels - curveAnchorTime) / 0.02) * 0.02);
+        auto at = std::lower_bound(curveStroke.begin(), curveStroke.end(), time, [](const auto& p, double t) { return p.seconds < t; });
+        if (at != curveStroke.end() && std::abs(at->seconds - time) < 1e-7) at->note = jlimit(24.0, 96.0, pitch(point.y));
+        else if (curveStroke.size() < 200000) curveStroke.insert(at, {time, jlimit(24.0, 96.0, pitch(point.y))});
+        if (panel.drawCurve(clickedNote, curveBase, curveStroke)) { panel.changed(); panel.updateAudition(); }
+        return;
     }
     if (selecting) {
         const Rectangle<float> range(origin, e.position); panel.selected = e.mods.isCtrlDown() ? selectionBefore : std::set<int>();
@@ -155,7 +161,7 @@ void PitchRollGrid::finishCurve(bool cancel) {
     panel.endAudition(cancel);
     if (cancel || (insertedCurveRegion && !panel.notes[size_t(clickedNote)].edited)) { panel.notes = dragBefore; panel.selected = selectionBefore; }
     else if (dragBefore != panel.notes) { panel.undo.push_back(std::move(dragBefore)); if (panel.undo.size() > 80) panel.undo.erase(panel.undo.begin()); panel.redo.clear(); }
-    drawingCurve = insertedCurveRegion = false; dragBefore.clear(); panel.changed();
+    drawingCurve = insertedCurveRegion = false; dragBefore.clear(); curveStroke.clear(); curveBase = {}; panel.changed();
 }
 void PitchRollGrid::focusLost(FocusChangeType) { if (drawingCurve) finishCurve(true); panel.endAudition(true); panel.finishSeek(); panel.finishLoop(true); }
 void PitchRollGrid::mouseWheelMove(const MouseEvent& e, const MouseWheelDetails& wheel) {

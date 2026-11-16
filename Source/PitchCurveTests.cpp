@@ -49,6 +49,65 @@ void runPitchCurveTests(const File& directory, StringArray& passed) {
     p.selected = {body}; p.moveSelected(0.5);
     check(std::abs(p.notes[size_t(body)].curve[0].note - flat[size_t(body)].curve[0].note - (p.notes[size_t(body)].target - flat[size_t(body)].target)) < 1e-8,
           "Whole-note transposition carries its drawn pitch curve with it"); p.undoLocal();
+    {
+        const auto savedUndo = p.undo, savedRedo = p.redo;
+        p.notes = before; p.undo.clear(); p.redo.clear(); p.changed();
+        grid.mouseDown(event(a, a));
+        for (int i = 1; i <= 300; ++i) grid.mouseDrag(event(a + (b - a) * (float(i) / 300), a));
+        grid.mouseUp(event(b, a));
+        double eventError = 0;
+        const auto manyEvents = p.notes;
+        for (int i = 0; i <= 100; ++i) {
+            const double time = 0.85 + i * 0.006;
+            eventError = jmax(eventError, std::abs(pitchEditShift(69, time, manyEvents[size_t(body)]) - pitchEditShift(69, time, flat[size_t(body)])));
+        }
+        check(eventError < 1e-8 && manyEvents[size_t(body)].curve.size() <= flat[size_t(body)].curve.size() + 2,
+              "A 300-event horizontal stroke matches a single-event stroke without cumulative feathering or extra curve points");
+        int flatPoints = 0; for (const auto& point : manyEvents[size_t(body)].curve) if (point.seconds >= 0.9 - 1e-6 && point.seconds <= 1.4 + 1e-6) ++flatPoints;
+        check(flatPoints <= 3, "A half-second flat gesture stores endpoints instead of dozens of analysis or mouse-event points");
+        p.notes = flat; p.undo.clear(); p.redo.clear(); p.changed();
+        const auto raised = a.translated(0, -float(grid.row));
+        grid.mouseDown(event(a, a)); grid.mouseDrag(event(raised, a)); const auto oneMove = p.notes;
+        for (int i = 0; i < 300; ++i) grid.mouseDrag(event(raised, a));
+        grid.mouseUp(event(raised, a));
+        check(p.notes == oneMove && p.undo.size() == 1, "Holding a vertical drag steady cannot sharpen its curve or accumulate correction over repeated events");
+        p.undoLocal(); check(p.notes == flat, "One Undo restores a complete smoothed stroke regardless of event count");
+        p.notes = before; p.undo.clear(); p.redo.clear(); p.changed();
+        grid.mouseDown(event(a, a));
+        for (int i = 1; i <= 300; ++i) {
+            auto noisy = a + (b - a) * (float(i) / 300); noisy.y += float(std::sin(i * 1.7) * grid.row * 0.06);
+            grid.mouseDrag(event(noisy, a));
+        }
+        grid.mouseUp(event(b, a));
+        double jitter = 0; for (int i = 0; i <= 100; ++i) jitter = jmax(jitter, std::abs(p.curvePitchAt(body, 0.96 + i * 0.0038) - leftPitch));
+        check(jitter < 0.045, "Dense small hand jitter is filtered instead of becoming rapid pitch steps");
+        bool preserved = true;
+        for (const auto& frame : p.frames) if (frame.voiced && clip.offset + frame.seconds < 0.83 && clip.offset + frame.seconds >= before[size_t(body)].start)
+            preserved &= std::abs(pitchEditShift(frame.note, clip.offset + frame.seconds, p.notes[size_t(body)])) < 1e-8;
+        check(preserved, "Stroke smoothing preserves measured vibrato outside its local transition shoulders");
+        p.notes = flat; auto& dense = p.notes[size_t(body)]; dense.curve.clear();
+        const double start = dense.start, end = dense.end, denseTarget = dense.target;
+        for (double time = start; time < end - 1e-7; time += 0.001)
+            dense.curve.push_back({time, dense.target + 0.15 * std::sin((time - start) * MathConstants<double>::twoPi * 5) + 0.08 * std::sin((time - start) * MathConstants<double>::twoPi * 80)});
+        dense.curve.push_back({end, dense.target}); dense.edited = true;
+        const auto denseBefore = p.notes; p.selected = {body}; p.undo.clear(); p.redo.clear(); p.changed(); p.smoothSelectedCurves();
+        const auto smooth = p.notes;
+        check(smooth[size_t(body)].curve.size() < denseBefore[size_t(body)].curve.size() / 5 && p.settings().valid(),
+              "Smooth selected curve reduces dense saved control points while preserving valid source-relative metadata");
+        double squared = 0, lowVibrato = 100, highVibrato = 0; int samples = 0;
+        for (double time = start + 0.07; time < end - 0.07; time += 0.001) {
+            const double value = p.curvePitchAt(body, time), expected = denseTarget + 0.15 * std::sin((time - start) * MathConstants<double>::twoPi * 5);
+            squared += (value - expected) * (value - expected); ++samples; lowVibrato = jmin(lowVibrato, value); highVibrato = jmax(highVibrato, value);
+        }
+        check(std::sqrt(squared / samples) < 0.025 && highVibrato - lowVibrato > 0.2,
+              "Smoothing suppresses rapid pitch chatter while retaining the slower musical vibrato");
+        check(smooth[size_t(body)].curve.front() == denseBefore[size_t(body)].curve.front() && smooth[size_t(body)].curve.back() == denseBefore[size_t(body)].curve.back(),
+              "Smooth selected curve preserves endpoint pitches and timing");
+        p.undoLocal(); check(p.notes == denseBefore, "Undo restores the exact dense curve before smoothing");
+        p.redoLocal(); check(p.notes == smooth, "Redo restores the simplified smooth curve");
+        e.recording = true; p.smoothSelectedCurves(); check(p.notes == smooth, "Recording blocks curve smoothing"); e.recording = false;
+        p.notes = flat; p.undo = savedUndo; p.redo = savedRedo; p.selected = {body}; p.changed();
+    }
     const auto valid = p.settings(); check(valid.valid(), "Drawn curve points produce valid source-relative correction metadata");
     auto invalid = valid; for (auto& n : invalid.notes) if (!n.curve.empty()) { n.curve[1].seconds = n.curve[0].seconds; break; }
     check(!invalid.valid(), "Duplicate or unordered pitch curve times are rejected before rendering");
@@ -144,6 +203,7 @@ void runPitchCurveTests(const File& directory, StringArray& passed) {
         stream->setPosition(0); stream->truncate(); PNGImageFormat().writeImageToStream(p.createComponentSnapshot(p.getLocalBounds()), *stream);
     }
     directory.getChildFile("pitch-unboxed-verification.txt").replaceWithText("Synthetic/offline only. Verified direct grabbing of unboxed voiced tails and isolated short fragments, silence/trim boundaries, click without mutation, Escape/focus cancellation, scoped edits and audition, Undo/Redo, fine Ctrl-drag, re-analysis/Apply/project persistence, and rendering of a 20 ms edit with sample-identical surrounding audio. No audio hardware opened.\n");
+    directory.getChildFile("pitch-smoothing-verification.txt").replaceWithText("Synthetic/offline only. Verified event-count-independent stroke reconstruction, sparse flat curves, stable stationary drags, filtered hand jitter, preserved undrawn vibrato, dense saved-curve smoothing with retained 5 Hz vibrato and suppressed 80 Hz chatter, endpoint preservation, Undo/Redo and recording guards. Existing offline pitch render and persistence checks also pass.\n");
     check(!e.devices.getCurrentAudioDevice() && !loaded.devices.getCurrentAudioDevice(), "Direct pitch-curve tests never open real audio hardware");
     directory.getChildFile("pitch-curve-verification.txt").replaceWithText("Synthetic/offline only. Verified native line grabbing/drawing, scoped vibrato flattening, live preview and preserved transport, stroke undo/redo, Escape/focus cancellation, fine Ctrl-drag, whole-note transposition, metadata validation, background rendering with measured pitch, sample-identical undrawn audio, split/re-analysis/persistence on moved and trimmed parts, selected-note restore, full reset and recording guards.\n");
 }

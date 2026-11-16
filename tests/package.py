@@ -59,7 +59,7 @@ shutil.copy2(verification / "clip-gain-verification.txt", portable / "clip-gain-
 for name in ("japanese-ui-preview.png", "japanese-ui-verification.txt", "project-safety-verification.txt", "reverb-preview.png", "delay-preview.png", "space-effects-verification.txt", "tuner-preview.png", "compressor-preview.png", "native-dynamics-verification.txt", "equalizer-preview.png", "equalizer-verification.txt", "pitch-editor-loop-preview.png", "pitch-editor-loop-verification.txt", "pitch-vertical-zoom-preview.png", "pitch-vertical-zoom-verification.txt", "pitch-curve-measurements.txt", "pitch-curve-preview.png", "pitch-curve-verification.txt", "pitch-scoop-dialog-preview.png", "pitch-scoop-curve-preview.png", "pitch-scoop-verification.txt", "pitch-follow-preview.png", "pitch-follow-verification.txt", "pitch-drag-preview.png", "pitch-preview-verification.txt", "pitch-roll-preview.png", "pitch-roll-verification.txt", "pitch-correction-verification.txt", "pitch-correction-dialog-preview.png", "normalize-verification.txt", "normalize-dialog-preview.png"):
     shutil.copy2(verification / name, portable / name)
 shutil.copy2(verification / "clip-gain-preview.png", portable / "clip-gain-preview.png")
-for name in ("pitch-unboxed-preview.png", "pitch-unboxed-verification.txt"):
+for name in ("pitch-unboxed-preview.png", "pitch-unboxed-verification.txt", "pitch-smoothing-verification.txt"):
     shutil.copy2(verification / name, portable / name)
 shutil.copy2(verification / "clip-trim-verification.txt", portable / "clip-trim-verification.txt")
 shutil.copy2(verification / "clip-trim-preview.png", portable / "clip-trim-preview.png")

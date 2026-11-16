@@ -32,7 +32,9 @@ private:
     bool drawingCurve = false;
     bool insertedCurveRegion = false;
     double curveGrabOffset = 0;
-    Point<float> curveLast;
+    PitchSegment curveBase;
+    std::vector<PitchCurvePoint> curveStroke;
+    double curveAnchorTime = 0;
     void finishCurve(bool cancel);
     int curveNoteAt(float x) const;
     int noteAt(Point<float>) const;
@@ -79,7 +81,8 @@ public:
     void numericPitch();
     void editScoop();
     bool mergeSelected();
-    bool drawCurve(int index, double fromTime, double fromNote, double toTime, double toNote);
+    bool drawCurve(int index, const PitchSegment& before, const std::vector<PitchCurvePoint>& stroke);
+    void smoothSelectedCurves();
     double curvePitchAt(int index, double sourceSeconds) const;
     PitchCorrectionSettings settings() const;
     const String clipId;
@@ -128,6 +131,7 @@ private:
     void syncCurrent();
     void showSelectedMessage();
     std::shared_ptr<const PitchPreviewCurve> auditionCurve(const PitchSegment&) const;
+    double curvePitchAt(const PitchSegment*, double sourceSeconds) const;
 };
 class PitchRollWindow : public DocumentWindow {
 public:

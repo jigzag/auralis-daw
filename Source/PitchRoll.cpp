@@ -312,11 +312,14 @@ void PitchRollPanel::contextMenu(int, double time) {
     menu.addItem(3, String::fromUTF8("元の音程へ")); menu.addSeparator(); menu.addItem(4, String::fromUTF8("ここで音を分割"), selected.size() == 1);
     menu.addItem(5, String::fromUTF8("しゃくりを調整..."), selected.size() == 1);
     menu.addItem(6, String::fromUTF8("選択音をまとめる"), selected.size() > 1);
+    bool hasCurve = false; for (int i : selected) if (isPositiveAndBelow(i, int(notes.size()))) hasCurve |= !notes[size_t(i)].curve.empty();
+    menu.addItem(7, String::fromUTF8("カーブを滑らかに"), hasCurve);
     menu.showMenuAsync(PopupMenu::Options(), [safe = Component::SafePointer<PitchRollPanel>(this), time](int id) {
         if (!safe) return; if (id == 1) MessageManager::callAsync([safe] { if (safe) safe->numericPitch(); });
         else if (id == 2) safe->snapSelected(); else if (id == 3) safe->restoreSelected(); else if (id == 4) safe->splitSelected(time);
         else if (id == 5) MessageManager::callAsync([safe] { if (safe) safe->editScoop(); });
         else if (id == 6) safe->mergeSelected();
+        else if (id == 7) safe->smoothSelectedCurves();
     });
 }
 void PitchRollPanel::numericPitch() {
