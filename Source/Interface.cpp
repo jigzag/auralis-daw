@@ -35,6 +35,26 @@ std::vector<int> clipDrawOrder(const Track& track, bool newestFirst = false) {
 }
 }
 
+void TransportButton::paintButton(Graphics& g, bool hover, bool down) {
+    const bool active = getToggleState();
+    getLookAndFeel().drawButtonBackground(g, *this, findColour(active ? buttonOnColourId : buttonColourId), hover, down);
+    const auto colour = icon == Icon::record ? (active ? Colours::white : Colour(0xffff9ba3))
+                                            : (active ? mint : findColour(textColourOffId));
+    g.setColour(colour.withMultipliedAlpha(isEnabled() ? 1.0f : 0.5f));
+    const auto centre = getLocalBounds().toFloat().getCentre();
+    const auto symbol = Rectangle<float>(14, 14).withCentre(centre);
+    switch (icon) {
+        case Icon::play: {
+            Path triangle;
+            triangle.addTriangle(symbol.getX() + 1, symbol.getY(), symbol.getX() + 1, symbol.getBottom(), symbol.getRight() + 1, centre.y);
+            g.fillPath(triangle);
+            break;
+        }
+        case Icon::stop: g.fillRect(symbol.reduced(1)); break;
+        case Icon::record: g.fillEllipse(symbol); break;
+    }
+}
+
 Timeline::Timeline(Workstation& w) : owner(w) { setMouseCursor(MouseCursor::NormalCursor); setWantsKeyboardFocus(true); }
 TimelineRuler::TimelineRuler(Timeline& t, Viewport& v) : timeline(t), viewport(v) {
     setOpaque(true); setComponentID("fixedTimelineRuler");
@@ -700,6 +720,7 @@ Workstation::Workstation(bool connectDevices, const File& pluginRegistry) : time
     homeButton.setTooltip(String::fromUTF8("再生位置を曲の先頭へ移動します。"));
     playButton.setTooltip(String::fromUTF8("再生・停止。Spaceでも操作できます。"));
     recordButton.setTooltip(String::fromUTF8("REC待機中のトラックを録音します。先にトラック左側のRECをONにしてください。"));
+    recordButton.setColour(TextButton::buttonOnColourId, Colour(0xffa63e52));
     stopButton.setTooltip(String::fromUTF8("再生・録音を停止します。"));
     buildButton(exportButton, [this] { exportAudio(); });
     buildButton(loopButton, [this] { toggleLoopSelection(); });

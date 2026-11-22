@@ -8,6 +8,14 @@ class PianoRollWindow;
 class MixerPanel;
 class ProjectStartPanel;
 class PitchRollWindow;
+class TransportButton : public TextButton {
+public:
+    enum class Icon { play, stop, record };
+    TransportButton(const String& name, Icon icon) : TextButton(name), icon(icon) {}
+    void paintButton(Graphics&, bool hover, bool down) override;
+private:
+    Icon icon;
+};
 enum class TrackControl { recordArm, mute, solo, monitor };
 class TrackControlButton : public TextButton {
 public:
@@ -230,7 +238,10 @@ private:
     TooltipWindow tooltips {this, 650};
     Image brandLogo;
     TextButton fileButton {TRANS("Project")}, importButton {TRANS("Import audio")}, addButton {TRANS("+ Track")}, settingsButton {TRANS("Audio / MIDI")};
-    TextButton playButton {TRANS("PLAY")}, stopButton {TRANS("STOP")}, recordButton {TRANS("RECORD")}, homeButton {"|<"};
+    TransportButton playButton {TRANS("PLAY"), TransportButton::Icon::play};
+    TransportButton stopButton {TRANS("STOP"), TransportButton::Icon::stop};
+    TransportButton recordButton {TRANS("RECORD"), TransportButton::Icon::record};
+    TextButton homeButton {"|<"};
     TextButton exportButton {TRANS("Export WAV")}, loopButton {TRANS("Loop")}, snapButton {TRANS("Snap")}, undoButton {TRANS("Undo edit")};
     TextButton newMidiButton {TRANS("+ MIDI clip")}, pianoButton {TRANS("Piano roll")};
     TextButton panicButton {TRANS("Panic")};
