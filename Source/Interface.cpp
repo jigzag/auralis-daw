@@ -410,10 +410,7 @@ void Timeline::mouseDown(const MouseEvent& e) {
     if (owner.busy || owner.engine.recording) return;
     headerDrag = -1; headerDrop = -1; dropTrack = -1;
     if (e.mods.isPopupMenu() && e.y >= seekLaneHeight && e.y < ruler) {
-        if (owner.hasTimeSelection) {
-            owner.hasTimeSelection = false;
-            owner.setStatus(String::fromUTF8("時間範囲の選択を解除しました。")); owner.refresh();
-        }
+        owner.clearTimeSelection();
         return;
     }
     if (e.x < header && e.y >= ruler && e.mods.isLeftButtonDown()) {
@@ -847,6 +844,19 @@ void Workstation::setTimeSelection(double start, double end) {
     }
     refresh();
 }
+void Workstation::clearTimeSelection() {
+    if (busy || engine.recording) return;
+    bool settingsChanged;
+    {
+        const ScopedLock guard(engine.lock);
+        settingsChanged = engine.loop || engine.recordRange;
+        hasTimeSelection = false; timeSelection = {};
+        engine.loop = false; engine.recordRange = false;
+        timeline.cancelTimeSelection();
+    }
+    if (settingsChanged) changed();
+    setStatus(String::fromUTF8("時間範囲・ループ・範囲録音を解除しました。")); refresh();
+}
 void Workstation::togglePunchSelection() {
     if (busy || engine.recording) return;
     if (!engine.recordRange && hasTimeSelection) { engine.recordFrom = timeSelection.getStart(); engine.recordTo = timeSelection.getEnd(); }
@@ -1173,7 +1183,7 @@ bool Workstation::keyPressed(const KeyPress& key) {
     if (projectStart && projectStart->isVisible()) { if (key == KeyPress::escapeKey) showProjectStart(false); return true; }
     if (dynamic_cast<TextEditor*>(Component::getCurrentlyFocusedComponent())) return false;
     if (key == KeyPress::F3Key) { toggleMixer(); return true; }
-    if (key == KeyPress::escapeKey) { hasTimeSelection = false; timeline.setCutMode(false); panicButton.onClick(); return true; }
+    if (key == KeyPress::escapeKey) { timeline.setCutMode(false); panicButton.onClick(); clearTimeSelection(); return true; }
     if (key == KeyPress::spaceKey) { playButton.triggerClick(); return true; }
     if (key.getModifiers().isCommandDown() && key.getKeyCode() == 'S') { save(false); return true; }
     if (key.getModifiers().isCommandDown() && key.getKeyCode() == 'Z') { undoEdit(); return true; }
@@ -1242,7 +1252,7 @@ void Workstation::projectMenu() {
     tools.addItem(15, TRANS("Cut tool    C"), !engine.recording, timeline.isCutMode());
     tools.addItem(16, TRANS("Cut selected clip at playhead    S"), engine.canSplitClip(selectedTrack, timeline.selectedClip, engine.cursor));
     tools.addSeparator(); tools.addItem(17, TRANS("Punch in selected range    P"), !engine.recording, engine.recordRange);
-    tools.addItem(18, TRANS("Clear time selection"), hasTimeSelection);
+    tools.addItem(18, TRANS("Clear time selection"), !engine.recording && (hasTimeSelection || engine.loop || engine.recordRange));
     tools.addItem(19, TRANS("Repeat selected range    L"), !engine.recording, engine.loop);
     tools.addItem(22, TRANS("Follow playhead"), true, followPlayhead);
     menu.addSubMenu(TRANS("Tools"), tools);
@@ -1261,7 +1271,7 @@ void Workstation::projectMenu() {
         if (result == 15) { safe->timeline.setCutMode(true); return; }
         if (result == 16) { safe->cutClipAt(safe->selectedTrack, safe->timeline.selectedClip, safe->engine.cursor); return; }
         if (result == 17) { safe->togglePunchSelection(); return; }
-        if (result == 18) { safe->hasTimeSelection = false; safe->refresh(); return; }
+        if (result == 18) { safe->clearTimeSelection(); return; }
         if (result == 19) { safe->toggleLoopSelection(); return; }
         if (result == 9) { safe->importButton.onClick(); return; }
         if (result == 10) { safe->exportAudio(); return; }

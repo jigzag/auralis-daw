@@ -78,6 +78,7 @@ public:
     void setCutMode(bool);
     bool isCutMode() const { return cutMode; }
     bool isInteracting() const { return draggingPlayhead || selectingTime || dragTrack >= 0 || headerDrag >= 0; }
+    void cancelTimeSelection() { selectingTime = false; rangeAnchor = 0; }
     double scroll = 0, zoom = 70;
     static constexpr int header = 320, seekLaneHeight = 26, ruler = 52, row = 224;
     double timeAt(float x) const { return jmax(0.0, scroll + (x - header) / zoom); }
@@ -150,6 +151,7 @@ public:
     bool hasTimeSelection = false;
     Range<double> timeSelection;
     void setTimeSelection(double start, double end);
+    void clearTimeSelection();
     void togglePunchSelection();
     void toggleLoopSelection();
     String status = TRANS("Ready. Import audio or arm a track to record.");
