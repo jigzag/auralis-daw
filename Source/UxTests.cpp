@@ -17,24 +17,24 @@ void runUxTests(const File& directory, StringArray& passed) {
           "Transport switches communicate on/off state through text as well as colour");
     w.snapButton.onClick(); check(!w.snap && w.snapButton.getButtonText().endsWith(" OFF"), "Snap state text changes immediately when its button is used");
     w.setTimeSelection(2, 6); e.loop = true; e.loopStart = 2; e.loopEnd = 6; e.recordRange = true; e.cursor = 4.75; e.playing = true; w.refresh();
-    check(clear->isVisible() && clear->isEnabled() && w.playButton.getButtonText() == String::fromUTF8("再生中"), "Active selection exposes an enabled clearing action and the transport shows playback state");
+    check(clear->isVisible() && clear->isEnabled() && w.playButton.getButtonText() == "PLAYING", "Active selection exposes an enabled clearing action and the transport shows playback state");
     clear->onClick();
     check(!w.hasTimeSelection && !e.loop && !e.recordRange && e.playing && e.cursor == 4.75 && !clear->isVisible(),
           "The visible range action clears actual selection/loop/punch state without stopping playback or moving the playhead");
     e.playing = false; w.setTimeSelection(2, 6); e.recording = true; w.refresh();
-    check(clear->isVisible() && !clear->isEnabled() && w.recordButton.getButtonText() == String::fromUTF8("録音中"), "Recording state is explicit and prevents the visible range action");
+    check(clear->isVisible() && !clear->isEnabled() && w.recordButton.getButtonText() == "RECORDING", "Recording state is explicit and prevents the visible range action");
     clear->onClick(); check(w.hasTimeSelection, "A stale range-button callback cannot cancel a range during recording"); e.recording = false;
     w.busy = true; w.refresh(); check(!clear->isEnabled(), "Busy work disables the contextual range action"); w.busy = false; w.clearTimeSelection();
     e.tracks[0]->armed = true; e.tracks[0]->monitor = true; w.refresh();
     auto* row = w.timeline.findChildWithID(e.tracks[0]->id);
     auto* arm = row ? dynamic_cast<TextButton*>(row->findChildWithID("arm")) : nullptr;
     auto* monitor = row ? dynamic_cast<TextButton*>(row->findChildWithID("monitor")) : nullptr;
-    check(arm && arm->getButtonText().contains(String::fromUTF8("待機")) && monitor && monitor->getButtonText() == String::fromUTF8("入力試聴"),
-          "Record arming is distinguished from active recording and input monitoring names what is heard");
+    check(arm && arm->getButtonText() == "REC ARM" && monitor && monitor->getButtonText() == "MON ON",
+          "Record arming is distinguished from active recording and the monitor button retains its name when active");
     e.recording = true; e.countInRemaining = 48000; w.refresh();
-    check(arm->getButtonText().contains(String::fromUTF8("待機")), "Count-in remains record waiting instead of claiming that input is already captured");
+    check(arm->getButtonText() == "REC ARM", "Count-in remains record waiting instead of claiming that input is already captured");
     e.countInRemaining = 0; w.refresh();
-    check(arm->getButtonText().contains(String::fromUTF8("録音")), "The track label identifies active capture after count-in ends"); e.recording = false;
+    check(arm->getButtonText() == "REC LIVE", "The track label identifies active capture after count-in ends"); e.recording = false;
     e.tracks[0]->armed = false; e.tracks[0]->monitor = false; w.refresh();
     check(arm->getButtonText() == "REC" && monitor->getButtonText() == "MON", "Track state labels return to their inactive values without changing routing");
     w.setStatus(String::fromUTF8("操作完了のフィードバック")); e.lockMisses = 3; w.timerCallback();

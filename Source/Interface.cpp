@@ -128,8 +128,8 @@ void TrackControlRow::sync(const Track& t, bool recording, bool busy) {
     arm.setToggleState(t.armed, dontSendNotification); mute.setToggleState(t.mute, dontSendNotification); solo.setToggleState(t.solo, dontSendNotification); monitor.setToggleState(t.monitor, dontSendNotification);
     const bool capturing = recording && owner.engine.countInRemaining == 0 && !owner.engine.recordingComplete
         && (!owner.engine.recordRange || owner.engine.cursor >= owner.engine.recordFrom);
-    arm.setButtonText(t.armed ? String::fromUTF8(capturing ? "REC 録音" : "REC 待機") : String("REC"));
-    monitor.setButtonText(t.monitor ? String::fromUTF8("入力試聴") : String("MON"));
+    arm.setButtonText(t.armed ? String(capturing ? "REC LIVE" : "REC ARM") : String("REC"));
+    monitor.setButtonText(t.monitor ? "MON ON" : "MON");
     monitor.setTooltip(t.monitor ? String::fromUTF8("入力試聴中：このトラックのパートを消音し、マイク・ギターなどの入力を聴きます。OFFでパートの再生に戻ります。") : TRANS("Input monitor: hear live input instead of this track's clips"));
     arm.setEnabled(!recording && !busy); mute.setEnabled(!busy); solo.setEnabled(!busy); monitor.setEnabled(!t.midi && !busy);
     add.setEnabled(!recording && !busy); more.setEnabled(!recording && !busy); gain.setEnabled(!busy); pan.setEnabled(!busy); name.setEnabled(!busy);
@@ -933,8 +933,8 @@ void Workstation::refresh() {
     horizontal.setCurrentRange(timeline.scroll, visible, dontSendNotification);
     playButton.setToggleState(engine.playing, dontSendNotification); recordButton.setToggleState(engine.recording, dontSendNotification);
     metronomeButton.setToggleState(engine.metronome, dontSendNotification);
-    playButton.setButtonText(engine.playing ? String::fromUTF8("再生中") : TRANS("PLAY"));
-    recordButton.setButtonText(engine.recording ? String::fromUTF8("録音中") : TRANS("RECORD"));
+    playButton.setButtonText(engine.playing ? "PLAYING" : "PLAY");
+    recordButton.setButtonText(engine.recording ? "RECORDING" : "RECORD");
     metronomeButton.setButtonText(TRANS("Metronome") + String(engine.metronome ? " ON" : " OFF"));
     loopButton.setButtonText(TRANS("Loop") + String(engine.loop ? " ON" : " OFF"));
     snapButton.setButtonText(TRANS("Snap") + String(snap ? " ON" : " OFF"));
@@ -962,8 +962,8 @@ void Workstation::timerCallback() {
     followTransport();
     if (mixer && mixerVisible) mixer->sync();
     playButton.setToggleState(engine.playing, dontSendNotification); recordButton.setToggleState(engine.recording, dontSendNotification);
-    playButton.setButtonText(engine.playing ? String::fromUTF8("再生中") : TRANS("PLAY"));
-    recordButton.setButtonText(engine.recording ? String::fromUTF8("録音中") : TRANS("RECORD"));
+    playButton.setButtonText(engine.playing ? "PLAYING" : "PLAY");
+    recordButton.setButtonText(engine.recording ? "RECORDING" : "RECORD");
     if (Time::getMillisecondCounterHiRes() >= statusUntil) {
         if (engine.lockMisses > 0) status = "Audio skipped " + String(engine.lockMisses.load()) + " blocks. See PROJECT > Audio diagnostics.";
         else if (engine.dropped > 0) status = "Recording dropped " + String(engine.dropped.load()) + " samples/events. See Audio diagnostics.";
