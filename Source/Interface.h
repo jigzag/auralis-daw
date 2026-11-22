@@ -85,6 +85,7 @@ public:
     float xAt(double time) const { return float(header + (time - scroll) * zoom); }
     int selectedClip = -1;
 private:
+    friend class TimelineRuler;
     Workstation& owner;
     std::vector<std::unique_ptr<TrackControlRow>> trackControls;
     int dragTrack = -1, dragClip = -1, dragMode = 0;
@@ -130,6 +131,7 @@ private:
     Timeline& timeline;
     Viewport& viewport;
     TrackControlButton selectTool, cutTool;
+    TextButton clearRange;
 };
 
 class PluginWindow : public DocumentWindow {
@@ -211,6 +213,7 @@ private:
     friend void runProjectOpenTests(const File&, StringArray&);
     friend void runProjectSafetyTests(const File&, StringArray&);
     friend void runJapaneseTests(const File&, StringArray&);
+    friend void runUxTests(const File&, StringArray&);
     friend void runTrackDeleteTests(const File&, StringArray&);
     friend void runClipGainTests(const File&, StringArray&);
     friend void runNormalizeTests(const File&, StringArray&);
@@ -260,6 +263,7 @@ private:
     std::unique_ptr<MidiKeyboardComponent> keys;
     ScrollBar horizontal {false};
     double followResumeAt = 0;
+    double statusUntil = 0;
     File projectFile;
     MemoryBlock savedPluginState;
     Component::SafePointer<AlertWindow> savePrompt;

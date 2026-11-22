@@ -43,16 +43,24 @@ TimelineRuler::TimelineRuler(Timeline& t, Viewport& v) : timeline(t), viewport(v
     for (auto* button : {&selectTool, &cutTool}) { addAndMakeVisible(button); button->setWantsKeyboardFocus(false); }
     selectTool.setTooltip(TRANS("Select and move parts (V). C toggles select / cut."));
     cutTool.setTooltip(TRANS("Cut parts (C). Click again or press V to select. Shift: free cut."));
+    addChildComponent(clearRange); clearRange.setComponentID("clearTimeRange"); clearRange.setButtonText(String::fromUTF8("範囲を解除")); clearRange.setWantsKeyboardFocus(false);
+    clearRange.setTooltip(String::fromUTF8("時間範囲の選択・ループ・範囲録音を解除します。再生は続けます。右クリックでも解除できます。"));
+    clearRange.onClick = [this] { timeline.owner.clearTimeSelection(); };
     selectTool.onClick = [this] { if (selectTool.isEnabled()) timeline.setCutMode(false); };
     cutTool.onClick = [this] { if (cutTool.isEnabled()) timeline.setCutMode(!timeline.isCutMode()); };
-    cutTool.setColour(TextButton::buttonOnColourId, Colour(0xff9b592c)); syncTools(true);
+    cutTool.setColour(TextButton::buttonOnColourId, Colour(0xff9b592c));
+    selectTool.setToggleState(!timeline.isCutMode(), dontSendNotification); cutTool.setToggleState(timeline.isCutMode(), dontSendNotification);
 }
 void TimelineRuler::resized() {
     selectTool.setBounds(196, 13, 56, 26); cutTool.setBounds(254, 13, 58, 26);
+    clearRange.setBounds(jmax(Timeline::header + 8, getWidth() - 120), Timeline::seekLaneHeight + 1, 112, Timeline::ruler - Timeline::seekLaneHeight - 2);
 }
 void TimelineRuler::syncTools(bool enabled) {
     selectTool.setToggleState(!timeline.isCutMode(), dontSendNotification); cutTool.setToggleState(timeline.isCutMode(), dontSendNotification);
     selectTool.setEnabled(enabled); cutTool.setEnabled(enabled);
+    const auto& w = timeline.owner;
+    const bool active = w.hasTimeSelection || w.engine.loop || w.engine.recordRange;
+    clearRange.setVisible(active); clearRange.setEnabled(enabled && active);
 }
 TrackControlRow::TrackControlRow(Workstation& owner, const String& trackId) : owner(owner), trackId(trackId) {
     setComponentID(trackId);
@@ -98,8 +106,8 @@ void TrackControlRow::resized() {
     add.setBounds(214, 142, 54, 23); more.setBounds(276, 142, 30, 23); inserts.setBounds(14, 171, 292, 41);
 }
 void TrackControlRow::paint(Graphics& g) {
-    if (getHeight() >= 140) { label(g, TRANS("VOLUME"), {14, 97, 160, 14}, 9); label(g, TRANS("PAN"), {202, 97, 104, 14}, 9); }
-    if (getHeight() >= 170) label(g, TRANS("INSERTS"), {14, 142, 170, 23}, 10, mint);
+    if (getHeight() >= 140) { label(g, TRANS("VOLUME"), {14, 97, 160, 14}, 11); label(g, TRANS("PAN"), {202, 97, 104, 14}, 11); }
+    if (getHeight() >= 170) label(g, TRANS("INSERTS") + (getNumRows() == 0 ? String::fromUTF8("  なし") : ""), {14, 142, 170, 23}, 11, mint);
     g.setColour(dim.withAlpha(0.7f)); g.fillRect(135, getHeight() - 3, 50, 1);
 }
 int Timeline::trackHeight(int i) const { return isPositiveAndBelow(i, int(owner.engine.tracks.size())) ? owner.engine.tracks[size_t(i)]->height : row; }
@@ -118,6 +126,11 @@ void TrackControlRow::sync(const Track& t, bool recording, bool busy) {
     if (!gain.isMouseButtonDown() && !(focused && gain.isParentOf(focused))) gain.setValue(Decibels::gainToDecibels(t.gain, -60.0f), dontSendNotification);
     if (!pan.isMouseButtonDown() && !(focused && pan.isParentOf(focused))) pan.setValue(t.pan, dontSendNotification);
     arm.setToggleState(t.armed, dontSendNotification); mute.setToggleState(t.mute, dontSendNotification); solo.setToggleState(t.solo, dontSendNotification); monitor.setToggleState(t.monitor, dontSendNotification);
+    const bool capturing = recording && owner.engine.countInRemaining == 0 && !owner.engine.recordingComplete
+        && (!owner.engine.recordRange || owner.engine.cursor >= owner.engine.recordFrom);
+    arm.setButtonText(t.armed ? String::fromUTF8(capturing ? "REC 録音" : "REC 待機") : String("REC"));
+    monitor.setButtonText(t.monitor ? String::fromUTF8("入力試聴") : String("MON"));
+    monitor.setTooltip(t.monitor ? String::fromUTF8("入力試聴中：このトラックのパートを消音し、マイク・ギターなどの入力を聴きます。OFFでパートの再生に戻ります。") : TRANS("Input monitor: hear live input instead of this track's clips"));
     arm.setEnabled(!recording && !busy); mute.setEnabled(!busy); solo.setEnabled(!busy); monitor.setEnabled(!t.midi && !busy);
     add.setEnabled(!recording && !busy); more.setEnabled(!recording && !busy); gain.setEnabled(!busy); pan.setEnabled(!busy); name.setEnabled(!busy);
     inserts.updateContent(); inserts.repaint(); resized();
@@ -351,6 +364,18 @@ void Timeline::paint(Graphics& g) {
     }
     float x = xAt(draggingPlayhead && !owner.engine.recording ? dragPosition : owner.engine.cursor.load()); g.setColour(mint); g.drawVerticalLine(int(x), 0, float(getHeight()));
     Path marker; marker.addTriangle(x - 5, 0, x + 5, 0, x, 8); g.fillPath(marker);
+    bool empty = !owner.engine.recording;
+    for (const auto& track : owner.engine.tracks) if (!track->clips.empty()) { empty = false; break; }
+    if (empty && g.getClipBounds().getBottom() > ruler + 80) {
+        const auto available = g.getClipBounds().getIntersection({header + 24, ruler + 28, jmax(0, getWidth() - header - 48), jmax(0, getHeight() - ruler - 56)});
+        if (available.getWidth() >= 400 && available.getHeight() >= 100) {
+            auto card = Rectangle<int>(0, 0, jmin(620, available.getWidth()), 100).withCentre(available.getCentre());
+            g.setColour(panel); g.fillRoundedRectangle(card.toFloat(), 8);
+            g.setColour(border); g.drawRoundedRectangle(card.toFloat(), 8, 1);
+            label(g, String::fromUTF8("音声・MIDIファイルをここへドロップ"), card.reduced(24, 0).withY(card.getY() + 16).withHeight(30), 17, text);
+            label(g, String::fromUTF8("プロジェクト → 読み込み ／ 録音する場合はトラックの REC をON"), card.reduced(24, 0).withY(card.getY() + 52).withHeight(28), 12, dim);
+        }
+    }
     g.restoreState();
     if (headerDrag >= 0 && !resizingTrack && headerDrop >= 0) { g.setColour(mint); g.fillRect(0, trackTop(headerDrop) + (headerDrop > headerDrag ? trackHeight(headerDrop) : 0), getWidth(), 3); }
     if (dropTrack >= 0 && dragMode == 3) { g.setColour(mint); g.drawRect(header, trackTop(dropTrack), getWidth() - header, trackHeight(dropTrack), 2); }
@@ -359,7 +384,6 @@ void Timeline::paint(Graphics& g) {
     label(g, TRANS("RANGE  /  drag to select"), {14, seekLaneHeight, 180, ruler - seekLaneHeight}, 11, Colour(0xff70bcff));
     g.setColour(border); g.drawHorizontalLine(seekLaneHeight - 1, 0, float(header));
     if (cutMode) label(g, TRANS("CUT / V: select"), {header + 10, ruler + 2, 120, 14}, 10, Colour(0xffffb477));
-    if (count == 0) label(g, TRANS("Drop audio here to start"), {header + 45, ruler + 50, 380, 45}, 22, dim);
 }
 void Timeline::setCutMode(bool enabled) {
     if (enabled && (owner.busy || owner.engine.recording)) return;
@@ -673,10 +697,15 @@ Workstation::Workstation(bool connectDevices, const File& pluginRegistry) : time
     buildButton(stopButton, [this] { try { bool wasRecording = engine.recording; engine.stop(); if (wasRecording) changed(); refresh(); } catch (const std::exception& e) { error(String::fromUTF8(e.what())); } });
     buildButton(recordButton, [this] { try { if (engine.recording) engine.finishRecording(); else engine.beginRecording(); changed(); refresh(); } catch (const std::exception& e) { error(String::fromUTF8(e.what())); } });
     buildButton(homeButton, [this] { if (!engine.recording) engine.seek(0); });
+    homeButton.setTooltip(String::fromUTF8("再生位置を曲の先頭へ移動します。"));
+    playButton.setTooltip(String::fromUTF8("再生・停止。Spaceでも操作できます。"));
+    recordButton.setTooltip(String::fromUTF8("REC待機中のトラックを録音します。先にトラック左側のRECをONにしてください。"));
+    stopButton.setTooltip(String::fromUTF8("再生・録音を停止します。"));
     buildButton(exportButton, [this] { exportAudio(); });
     buildButton(loopButton, [this] { toggleLoopSelection(); });
     loopButton.setTooltip(TRANS("Repeat the selected time range (L). Options sets manual loop points."));
-    buildButton(snapButton, [this] { snap = !snap; snapButton.setToggleState(snap, dontSendNotification); }); snapButton.setToggleState(true, dontSendNotification);
+    buildButton(snapButton, [this] { snap = !snap; snapButton.setToggleState(snap, dontSendNotification); snapButton.setButtonText(TRANS("Snap") + String(snap ? " ON" : " OFF")); }); snapButton.setToggleState(true, dontSendNotification);
+    snapButton.setTooltip(String::fromUTF8("パートの移動位置やカット位置を拍に合わせます。ON/OFFの状態はボタンに表示します。"));
     buildButton(undoButton, [this] { undoEdit(); });
     buildButton(scanButton, [this] { scanPlugins(); });
     buildButton(loadButton, [this] { insertPlugin(); });
@@ -771,17 +800,20 @@ void Workstation::paint(Graphics& g) {
     const int contentTop = transportExpanded ? 190 : 130;
     g.setColour(panel); g.fillRect(0, 62, getWidth(), 62); 
     String title = projectFile == File() ? TRANS("Untitled session") : projectFile.getFileNameWithoutExtension();
-    label(g, title + (dirty ? " *" : ""), {548, 14, getWidth() - 713, 25}, 14, text);
-    label(g, timeText(engine.cursor), {320, 72, 154, 35}, 26, mint);
+    label(g, title, {548, 14, getWidth() - 816, 31}, 16, text);
+    auto projectBadge = Rectangle<int>(getWidth() - 254, 18, 96, 25);
+    g.setColour((dirty ? Colour(0xffffbd79) : mint).withAlpha(0.12f)); g.fillRoundedRectangle(projectBadge.toFloat(), 4);
+    label(g, dirty ? String::fromUTF8("未保存の変更") : projectFile == File() ? String::fromUTF8("新規") : String::fromUTF8("保存済み"), projectBadge.reduced(8, 0), 11, dirty ? Colour(0xffffbd79) : mint);
+    label(g, timeText(engine.cursor), {320, 72, 154, 35}, 26, engine.recording ? Colour(0xffff7a85) : mint);
     label(g, "BPM", {488, 76, 34, 28}, 10);
-    String transportInfo;
+    String transportInfo = engine.recording ? String::fromUTF8("録音中") : engine.playing ? String::fromUTF8("再生中") : String::fromUTF8("停止中");
     if (engine.countInRemaining > 0) transportInfo = TRANS("Count ") + String(int(std::ceil(engine.countInRemaining * engine.bpm / (60.0 * engine.rate))));
     else if (engine.recording && engine.recordRange && engine.cursor < engine.recordFrom) transportInfo = TRANS("Pre-roll");
-    else if (engine.countInBars > 0) transportInfo = TRANS("Count-in ") + String(engine.countInBars.load()) + TRANS(" bar") + (engine.countInBars > 1 ? "s" : "");
+    else if (engine.countInBars > 0) transportInfo += " / " + TRANS("Count-in ") + String(engine.countInBars.load()) + TRANS(" bar") + (engine.countInBars > 1 ? "s" : "");
     if (hasTimeSelection) transportInfo += (transportInfo.isEmpty() ? "" : "   /   ") + String(TRANS("Selection ")) + String(timeSelection.getStart(), 2) + " - " + String(timeSelection.getEnd(), 2) + " s";
-    if (engine.recordRange) transportInfo += (transportInfo.isEmpty() ? "" : "   /   ") + String(TRANS("Record ")) + String(engine.recordFrom.load(), 2) + " - " + String(engine.recordTo.load(), 2) + " s";
-    if (engine.loop) transportInfo += (transportInfo.isEmpty() ? "" : "   /   ") + String(TRANS("Loop ")) + String(engine.loopStart.load(), 2) + " - " + String(engine.loopEnd.load(), 2) + " s";
-    label(g, transportInfo, {320, 106, 600, 16}, 10, engine.countInRemaining > 0 ? mint : dim);
+    if (engine.recordRange) transportInfo += hasTimeSelection && timeSelection == Range<double>(engine.recordFrom.load(), engine.recordTo.load()) ? String::fromUTF8(" / 範囲録音 ON") : " / " + String(TRANS("Record ")) + String(engine.recordFrom.load(), 2) + " - " + String(engine.recordTo.load(), 2) + " s";
+    if (engine.loop) transportInfo += hasTimeSelection && timeSelection == Range<double>(engine.loopStart.load(), engine.loopEnd.load()) ? String::fromUTF8(" / ループ ON") : " / " + String(TRANS("Loop ")) + String(engine.loopStart.load(), 2) + " - " + String(engine.loopEnd.load(), 2) + " s";
+    label(g, transportInfo, {320, 106, 660, 18}, 11, engine.recording ? Colour(0xffff7a85) : engine.playing ? mint : dim);
     if (transportExpanded) {
         g.setColour(panel); g.fillRoundedRectangle(16, 130, float(getWidth() - 32), 54, 5);
         label(g, TRANS("COUNT IN"), {24, 130, 116, 20}, 10, dim);
@@ -800,8 +832,8 @@ void Workstation::paint(Graphics& g) {
     String info = String(engine.rate.load() / 1000, 1) + " kHz  /  " + String(engine.block) + TRANS(" samples");
     if (device) info += " / " + device->getTypeName();
     info += " / DSP " + String(engine.devices.getCpuUsage() * 100, 1) + "% / XRuns " + String(engine.audioXRuns()) + " / Skips " + String(engine.lockMisses.load());
-    label(g, japaneseMessage(status), {15, getHeight() - 27, getWidth() - 640, 27}, 11, (engine.dropped > 0 || engine.lockMisses > 0) ? Colour(0xffff7a85) : dim);
-    label(g, info, {getWidth() - 610, getHeight() - 27, 600, 27}, 10);
+    label(g, japaneseMessage(status), {15, getHeight() - 27, getWidth() - 600, 27}, 12, text);
+    label(g, info, {getWidth() - 570, getHeight() - 27, 560, 27}, 11, engine.outputPeak > 1 ? Colour(0xffff7a85) : engine.dropped > 0 || engine.lockMisses > 0 ? Colour(0xffffbd79) : dim);
     if (busy) { g.setColour(Colours::black.withAlpha(0.55f)); g.fillAll(); label(g, japaneseMessage(status), {getWidth() / 2 - 280, getHeight() / 2 - 30, 560, 60}, 20, mint); }
 }
 void Workstation::resized() {
@@ -810,9 +842,9 @@ void Workstation::resized() {
     settingsButton.setBounds(getWidth() - 132, 16, 114, 31);
     homeButton.setBounds(20, 76, 34, 32); playButton.setBounds(62, 76, 68, 32);
     stopButton.setBounds(138, 76, 68, 32); recordButton.setBounds(214, 76, 84, 32);
-    tempo.setBounds(526, 76, 58, 30); metronomeButton.setBounds(600, 76, 92, 30);
-    loopButton.setBounds(700, 76, 54, 30); snapButton.setBounds(762, 76, 54, 30);
-    transportOptions.setBounds(824, 76, 90, 30);
+    tempo.setBounds(526, 76, 58, 30); metronomeButton.setBounds(600, 76, 132, 30);
+    loopButton.setBounds(740, 76, 84, 30); snapButton.setBounds(832, 76, 76, 30);
+    transportOptions.setBounds(916, 76, 64, 30);
     transportOptions.setToggleState(transportExpanded, dontSendNotification);
     for (auto* field : std::initializer_list<Component*>{&countIn, &recordRangeButton, &recordFrom, &recordTo, &loopFrom, &loopTo}) field->setVisible(transportExpanded);
     countIn.setBounds(24, 150, 116, 26); recordRangeButton.setBounds(162, 150, 110, 26);
@@ -890,6 +922,7 @@ void Workstation::fitProject() {
 void Workstation::refresh() {
     rulerBar.syncTools(!busy && !engine.recording);
     rulerBar.repaint();
+    fileButton.setTooltip((projectFile == File() ? String::fromUTF8("新規プロジェクト") : projectFile.getFullPathName()) + String::fromUTF8("\nCtrl+S: 保存 ／ プロジェクトの各操作"));
     if (!masterVolume.isMouseButtonDown() && !masterVolume.hasKeyboardFocus(true))
         masterVolume.setValue(Decibels::gainToDecibels(engine.master.load(), -60.0f), dontSendNotification);
     int width = viewport.getWidth() - 15;
@@ -900,6 +933,12 @@ void Workstation::refresh() {
     horizontal.setCurrentRange(timeline.scroll, visible, dontSendNotification);
     playButton.setToggleState(engine.playing, dontSendNotification); recordButton.setToggleState(engine.recording, dontSendNotification);
     metronomeButton.setToggleState(engine.metronome, dontSendNotification);
+    playButton.setButtonText(engine.playing ? String::fromUTF8("再生中") : TRANS("PLAY"));
+    recordButton.setButtonText(engine.recording ? String::fromUTF8("録音中") : TRANS("RECORD"));
+    metronomeButton.setButtonText(TRANS("Metronome") + String(engine.metronome ? " ON" : " OFF"));
+    loopButton.setButtonText(TRANS("Loop") + String(engine.loop ? " ON" : " OFF"));
+    snapButton.setButtonText(TRANS("Snap") + String(snap ? " ON" : " OFF"));
+    recordRangeButton.setButtonText(TRANS("Punch in") + String(engine.recordRange ? " ON" : " OFF"));
     recordRangeButton.setToggleState(engine.recordRange, dontSendNotification);
     countIn.setSelectedId(engine.countInBars + 1, dontSendNotification);
     if (!recordFrom.hasKeyboardFocus(true)) recordFrom.setText(String(engine.recordFrom.load(), 3), false);
@@ -923,9 +962,13 @@ void Workstation::timerCallback() {
     followTransport();
     if (mixer && mixerVisible) mixer->sync();
     playButton.setToggleState(engine.playing, dontSendNotification); recordButton.setToggleState(engine.recording, dontSendNotification);
-    if (engine.lockMisses > 0) status = "Audio skipped " + String(engine.lockMisses.load()) + " blocks. See PROJECT > Audio diagnostics.";
-    else if (engine.dropped > 0) status = "Recording dropped " + String(engine.dropped.load()) + " samples/events. See Audio diagnostics.";
-    else if (engine.outputPeak > 1) status = TRANS("Master clipping. Reduce track or master volume before export.");
+    playButton.setButtonText(engine.playing ? String::fromUTF8("再生中") : TRANS("PLAY"));
+    recordButton.setButtonText(engine.recording ? String::fromUTF8("録音中") : TRANS("RECORD"));
+    if (Time::getMillisecondCounterHiRes() >= statusUntil) {
+        if (engine.lockMisses > 0) status = "Audio skipped " + String(engine.lockMisses.load()) + " blocks. See PROJECT > Audio diagnostics.";
+        else if (engine.dropped > 0) status = "Recording dropped " + String(engine.dropped.load()) + " samples/events. See Audio diagnostics.";
+        else if (engine.outputPeak > 1) status = TRANS("Master clipping. Reduce track or master volume before export.");
+    }
     timeline.repaint(); repaint();
 }
 void Workstation::changed() { dirty = true; loopButton.setToggleState(engine.loop, dontSendNotification); }
@@ -1056,7 +1099,7 @@ void Workstation::applyControls() {
     if (modified) changed();
     if (mixer && mixerVisible) mixer->sync();
 }
-void Workstation::setStatus(const String& message) { status = message; repaint(); }
+void Workstation::setStatus(const String& message) { status = message; statusUntil = Time::getMillisecondCounterHiRes() + 5000; repaint(); }
 void Workstation::error(const String& message) { status = message; AlertWindow::showMessageBoxAsync(MessageBoxIconType::NoIcon, "Auralis", japaneseMessage(message)); repaint(); }
 void Workstation::rememberEdit() {
     const ScopedLock guard(engine.lock); std::vector<std::vector<Clip>> state;

@@ -95,6 +95,7 @@ private:
     friend void runPitchCurveTests(const File&, StringArray&);
     friend void runPitchZoomTests(const File&, StringArray&);
     friend void runPitchLoopTests(const File&, StringArray&);
+    friend void runUxTests(const File&, StringArray&);
     Component::SafePointer<Workstation> owner;
     String trackId;
     Clip snapshot;

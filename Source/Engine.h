@@ -287,6 +287,7 @@ void runTrackDetailsTests(const File&, StringArray& passed);
 void runFollowTests(const File&, StringArray& passed);
 void runTrackDragTests(const File&, StringArray& passed);
 void runFixedRulerTests(const File&, StringArray& passed);
+void runUxTests(const File&, StringArray& passed);
 void runPluginInfoTests(const File&, StringArray& passed);
 void runMasterInsertTests(const File&, StringArray& passed);
 }

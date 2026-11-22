@@ -33,7 +33,7 @@ PitchRollPanel::PitchRollPanel(Workstation& w, String track, String clip, const 
     curveEdit.setTooltip(String::fromUTF8("緑の音程線を直接ドラッグして部分的に描き直します。音のブロックがない短い線や語尾も編集できます。横に引くと平らにできます。Ctrlで上下を微調整。"));
     curveEdit.onClick = [this] { endAudition(true); grid.setMouseCursor(curveEdit.getToggleState() ? MouseCursor::CrosshairCursor : MouseCursor::UpDownResizeCursor); grid.repaint(); };
     addAndMakeVisible(rangeLoop); rangeLoop.setComponentID("pitchRangeLoop"); rangeLoop.setButtonText(String::fromUTF8("範囲ループ")); rangeLoop.setWantsKeyboardFocus(false);
-    rangeLoop.setTooltip(String::fromUTF8("LOOP欄をドラッグして音程調整専用の範囲を指定します。ダブルクリックで解除。プロジェクトのループ範囲は変更しません。"));
+    rangeLoop.setTooltip(String::fromUTF8("LOOP欄をドラッグして音程調整専用の範囲を指定します。右クリックまたはダブルクリックで解除。プロジェクトのループ範囲は変更しません。"));
     rangeLoop.onClick = [this] { updateLoop(); repaint(); };
     addAndMakeVisible(verticalZoom); verticalZoom.setComponentID("pitchVerticalZoom"); verticalZoom.setRange(0.5, 32, 0.01);
     verticalZoom.setSkewFactorFromMidPoint(4); verticalZoom.setValue(1, dontSendNotification); verticalZoom.setTextValueSuffix(" x");
@@ -108,10 +108,12 @@ void PitchRollPanel::resized() {
 }
 void PitchRollPanel::paint(Graphics& g) {
     g.fillAll(bg); g.setColour(panelColour); g.fillRect(0, 0, getWidth(), bodyTop);
-    g.setColour(pending ? Colour(0xffffbd79) : ink); g.setFont(12);
-    String info = pending ? String::fromUTF8("未適用  |  ") : snapshot.pitchOriginal ? String::fromUTF8("適用済み  |  ") : String::fromUTF8("元音声  |  ");
-    info += message + "  |  A4=" + String(snapshot.pitchSettings.referenceHz, 1) + " Hz";
-    g.drawText(info, 12, 44, getWidth() - 285, 21, Justification::centredLeft);
+    const Colour state = pending ? Colour(0xffffbd79) : snapshot.pitchOriginal ? mint : Colour(0xffa4b4c2);
+    g.setColour(state.withAlpha(0.14f)); g.fillRoundedRectangle(12, 43, 116, 23, 4);
+    g.setColour(state); g.setFont(12);
+    g.drawText(pending ? String::fromUTF8("未適用の変更") : snapshot.pitchOriginal ? String::fromUTF8("音声に適用済み") : String::fromUTF8("元の録音"), 20, 43, 100, 23, Justification::centredLeft);
+    g.setColour(ink); g.drawText(message, 140, 44, jmax(0, getWidth() - 425), 21, Justification::centredLeft);
+    if (getWidth() >= 1020) { g.setColour(Colour(0xffa4b4c2)); g.setFont(11); g.drawText("A4=" + String(snapshot.pitchSettings.referenceHz, 1) + " Hz", 782, 12, 114, 28, Justification::centredLeft); }
     const int viewY = viewport.getViewPositionY(), viewX = viewport.getViewPositionX();
     { Graphics::ScopedSaveState save(g); g.reduceClipRegion(0, bodyTop, keyWidth, viewport.getHeight());
       for (int n = PitchRollGrid::lowest; n <= PitchRollGrid::highest; ++n) {
@@ -163,6 +165,9 @@ void PitchRollPanel::timerCallback() {
     restoreButton.setEnabled(canEdit && !selected.empty()); discardButton.setEnabled(owner && !owner->busy && pending);
     undoButton.setEnabled(canEdit); reloadButton.setEnabled(owner && !owner->busy && !owner->engine.recording && !pending && resolve());
     grid.setEnabled(canEdit); play.setButtonText(pending ? String::fromUTF8("適用して再生") : String::fromUTF8("再生"));
+    applyButton.setColour(TextButton::buttonColourId, pending ? Colour(0xff725136) : Colour(0xff29333e));
+    applyButton.setTooltip(pending ? String::fromUTF8("未適用の編集を音声へ反映します。Ctrl+Enter。反映後もプロジェクトのCtrl+Zで戻せます。") : String::fromUTF8("適用待ちの変更はありません。音やカーブを編集すると適用できます。"));
+    play.setTooltip(pending ? String::fromUTF8("未適用の編集を音声へ反映してから再生します。Space。") : String::fromUTF8("現在の音声を再生します。Spaceで再生・停止。"));
     rangeLoop.setEnabled(canEdit && loopRange.getLength() >= 0.02 - 1e-9);
     if (rangeLoop.getToggleState() && !selectingLoop && owner) {
         if (!resolve() || stale || owner->engine.recording || !owner->engine.ownsPitchLoop(auditionId)) { rangeLoop.setToggleState(false, dontSendNotification); owner->engine.clearPitchLoop(auditionId); }
@@ -192,6 +197,7 @@ void PitchRollPanel::seek(float x) {
     owner->engine.seek(snapshot.start + seekPosition);
 }
 void PitchRollPanel::mouseDown(const MouseEvent& e) {
+    if (e.mods.isPopupMenu()) { mouseDoubleClick(e); return; }
     if (e.mods.isLeftButtonDown() && e.y >= rangeTop && e.y < bodyTop && e.x >= keyWidth) {
         if (!owner || owner->busy || owner->engine.recording || stale || !resolve()) return;
         if (grid.isShowing()) grid.grabKeyboardFocus(); endAudition(true); selectingLoop = true; loopBefore = loopRange;
@@ -233,7 +239,9 @@ void PitchRollPanel::updateAudition() {
 void PitchRollPanel::endAudition(bool immediate) { if (owner) owner->engine.stopPitchPreview(auditionId, immediate); auditionNote = -1; }
 void PitchRollPanel::remember() { undo.push_back(notes); if (undo.size() > 80) undo.erase(undo.begin()); redo.clear(); }
 void PitchRollPanel::showSelectedMessage() {
-    if (selected.size() == 1 && isPositiveAndBelow(*selected.begin(), int(notes.size()))) {
+    if (selected.empty()) message = notes.empty() ? String::fromUTF8("音程を検出できませんでした。単音の録音で試してください。")
+        : curveEdit.getToggleState() ? String::fromUTF8("緑の線をドラッグして編集。反映には「適用」。") : String::fromUTF8("音を選んで上下にドラッグ。Ctrlで微調整。反映には「適用」。");
+    else if (selected.size() == 1 && isPositiveAndBelow(*selected.begin(), int(notes.size()))) {
         const auto& n = notes[size_t(*selected.begin())]; message = pitchName(n.original) + "  ->  " + pitchName(n.target) + "  (" + String(n.start - snapshot.offset, 2) + "s)";
     } else message = String(selected.size()) + String::fromUTF8(" 音を選択");
 }

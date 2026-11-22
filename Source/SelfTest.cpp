@@ -135,6 +135,7 @@ int runSelfTests(const File& directory) {
         runFollowTests(directory, passed);
         runTrackDragTests(directory, passed);
         runFixedRulerTests(directory, passed);
+        runUxTests(directory, passed);
         runPluginInfoTests(directory, passed);
         runMasterInsertTests(directory, passed);
         runEqualizerTests(directory, passed);

@@ -39,6 +39,6 @@ private:
     Component channels;
     std::vector<std::unique_ptr<MixerStrip>> strips;
     MixerStrip master;
-    TextButton close {"Hide"};
+    TextButton close {TRANS("Hide")};
 };
 }

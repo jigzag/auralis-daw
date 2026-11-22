@@ -26,7 +26,7 @@ MixerStrip::MixerStrip(Workstation& w, String id) : trackId(std::move(id)), owne
     addAndMakeVisible(name); name.setWantsKeyboardFocus(false);
     name.onClick = [this] { if (!owner.busy && trackId.isNotEmpty()) for (int i = 0; i < int(owner.engine.tracks.size()); ++i)
         if (owner.engine.tracks[size_t(i)]->id == trackId) { owner.selectTrack(i); return; } };
-    name.setTooltip(TRANS("Select this track and show its inputs and inserts in the right panel"));
+    name.setTooltip(TRANS("Select this track in the arrangement"));
     for (auto entry : {std::pair<TextButton*, TrackControl>{&arm, TrackControl::recordArm}, {&mute, TrackControl::mute}, {&solo, TrackControl::solo}, {&monitor, TrackControl::monitor}}) {
         auto& button = *entry.first; addAndMakeVisible(button); button.setWantsKeyboardFocus(false);
         button.onClick = [this, action = entry.second] { if (!owner.busy) owner.toggleTrackControl(trackId, action); };
@@ -56,7 +56,7 @@ void MixerStrip::sync() {
         arm.setToggleState(track->armed, dontSendNotification); mute.setToggleState(track->mute, dontSendNotification); solo.setToggleState(track->solo, dontSendNotification);
         arm.setEnabled(!owner.engine.recording && !owner.busy);
         monitor.setToggleState(track->monitor, dontSendNotification); monitor.setEnabled(!track->midi && !owner.busy);
-        detail = String(index + 1).paddedLeft('0', 2) + (track->midi ? "  MIDI" : "  AUDIO") + "  /  " + String(track->inserts.size()) + " FX";
+        detail = track->monitor ? String::fromUTF8("入力試聴 / パート消音") : String(index + 1).paddedLeft('0', 2) + (track->midi ? "  MIDI" : String::fromUTF8("  音声")) + " / " + String(track->inserts.size()) + " FX";
     } else { detail = "OUT / " + String(owner.engine.masterInserts.size()) + " FX"; inserts.updateContent(); inserts.repaint(); add.setEnabled(!owner.engine.recording && !owner.busy); more.setEnabled(!owner.engine.recording && !owner.busy); }
     peak = jmax(track ? track->peak.load() : owner.engine.outputPeak.load(), peak * 0.82f);
     repaint();

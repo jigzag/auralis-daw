@@ -61,6 +61,8 @@ for name in ("japanese-ui-preview.png", "japanese-ui-verification.txt", "project
 shutil.copy2(verification / "clip-gain-preview.png", portable / "clip-gain-preview.png")
 for name in ("pitch-unboxed-preview.png", "pitch-unboxed-verification.txt", "pitch-smoothing-verification.txt"):
     shutil.copy2(verification / name, portable / name)
+for name in ("ux-empty-preview.png", "ux-compact-preview.png", "ux-workstation-preview.png", "ux-mixer-preview.png", "ux-pitch-pending-preview.png", "ux-review-verification.txt"):
+    shutil.copy2(verification / name, portable / name)
 shutil.copy2(verification / "clip-trim-verification.txt", portable / "clip-trim-verification.txt")
 shutil.copy2(verification / "clip-trim-preview.png", portable / "clip-trim-preview.png")
 shutil.copy2(verification / "overlap-verification.txt", portable / "overlap-verification.txt")
