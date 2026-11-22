@@ -11,6 +11,9 @@ void runUxTests(const File& directory, StringArray& passed) {
         }
     };
     Workstation w(false); w.stopTimer(); auto& e = w.engine;
+    w.recordButton.onClick();
+    check(!e.recording && !w.dirty && w.status.contains(String::fromUTF8("REC をON")),
+          "Record with no armed track gives inline guidance without changing the project");
     auto* clear = dynamic_cast<TextButton*>(w.rulerBar.findChildWithID("clearTimeRange"));
     check(clear && !clear->isVisible(), "Range clearing is discoverable in its own lane without adding a control to an empty range");
     check(w.loopButton.getButtonText().endsWith(" OFF") && w.snapButton.getButtonText().endsWith(" ON") && w.metronomeButton.getButtonText().endsWith(" OFF"),

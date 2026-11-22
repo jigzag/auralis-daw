@@ -26,6 +26,9 @@ private:
     TextEditor listing;
 };
 String timeText(double t) { return String(int(t) / 60).paddedLeft('0', 2) + ":" + String(int(t) % 60).paddedLeft('0', 2) + "." + String(int(t * 100) % 100).paddedLeft('0', 2); }
+int armedTrackCount(const Engine& engine) {
+    return int(std::count_if(engine.tracks.begin(), engine.tracks.end(), [](const auto& track) { return track->armed; }));
+}
 void label(Graphics& g, String s, Rectangle<int> r, float size = 12, Colour colour = dim) { g.setColour(colour); g.setFont(size); g.drawText(s, r, Justification::centredLeft); }
 double snapTime(const Workstation& w, double t) { double beat = 60.0 / w.engine.bpm.load(); return w.snap ? std::round(t / beat) * beat : t; }
 std::vector<int> clipDrawOrder(const Track& track, bool newestFirst = false) {
@@ -715,7 +718,17 @@ Workstation::Workstation(bool connectDevices, const File& pluginRegistry) : time
     }
     buildButton(playButton, [this] { if (engine.playing) engine.stop(); else engine.play(); refresh(); });
     buildButton(stopButton, [this] { try { bool wasRecording = engine.recording; engine.stop(); if (wasRecording) changed(); refresh(); } catch (const std::exception& e) { error(String::fromUTF8(e.what())); } });
-    buildButton(recordButton, [this] { try { if (engine.recording) engine.finishRecording(); else engine.beginRecording(); changed(); refresh(); } catch (const std::exception& e) { error(String::fromUTF8(e.what())); } });
+    buildButton(recordButton, [this] {
+        if (busy) return;
+        if (!engine.recording && armedTrackCount(engine) == 0) {
+            setStatus(String::fromUTF8("録音するトラックの左側にある REC をONにしてください。"));
+            return;
+        }
+        try {
+            if (engine.recording) engine.finishRecording(); else engine.beginRecording();
+            changed(); refresh();
+        } catch (const std::exception& e) { error(String::fromUTF8(e.what())); }
+    });
     buildButton(homeButton, [this] { if (!engine.recording) engine.seek(0); });
     homeButton.setTooltip(String::fromUTF8("再生位置を曲の先頭へ移動します。"));
     playButton.setTooltip(String::fromUTF8("再生・停止。Spaceでも操作できます。"));
@@ -825,7 +838,10 @@ void Workstation::paint(Graphics& g) {
     auto projectBadge = Rectangle<int>(getWidth() - 254, 18, 96, 25);
     g.setColour((dirty ? Colour(0xffffbd79) : mint).withAlpha(0.12f)); g.fillRoundedRectangle(projectBadge.toFloat(), 4);
     label(g, dirty ? String::fromUTF8("未保存の変更") : projectFile == File() ? String::fromUTF8("新規") : String::fromUTF8("保存済み"), projectBadge.reduced(8, 0), 11, dirty ? Colour(0xffffbd79) : mint);
-    label(g, timeText(engine.cursor), {320, 72, 154, 35}, 26, engine.recording ? Colour(0xffff7a85) : mint);
+    const int armed = armedTrackCount(engine);
+    const String armInfo = armed == 0 ? String::fromUTF8("録音対象なし") : String::fromUTF8("REC 待機 ") + String(armed) + String::fromUTF8("トラック");
+    if (!engine.recording) label(g, armInfo, {20, 109, 210, 17}, 11, armed > 0 ? Colour(0xffffbd79) : dim);
+    label(g, timeText(engine.cursor), {250, 71, 226, 38}, 30, engine.recording ? Colour(0xffff7a85) : mint);
     label(g, "BPM", {488, 76, 34, 28}, 10);
     String transportInfo = engine.recording ? String::fromUTF8("録音中") : engine.playing ? String::fromUTF8("再生中") : String::fromUTF8("停止中");
     if (engine.countInRemaining > 0) transportInfo = TRANS("Count ") + String(int(std::ceil(engine.countInRemaining * engine.bpm / (60.0 * engine.rate))));
@@ -834,11 +850,11 @@ void Workstation::paint(Graphics& g) {
     if (hasTimeSelection) transportInfo += (transportInfo.isEmpty() ? "" : "   /   ") + String(TRANS("Selection ")) + String(timeSelection.getStart(), 2) + " - " + String(timeSelection.getEnd(), 2) + " s";
     if (engine.recordRange) transportInfo += hasTimeSelection && timeSelection == Range<double>(engine.recordFrom.load(), engine.recordTo.load()) ? String::fromUTF8(" / 範囲録音 ON") : " / " + String(TRANS("Record ")) + String(engine.recordFrom.load(), 2) + " - " + String(engine.recordTo.load(), 2) + " s";
     if (engine.loop) transportInfo += hasTimeSelection && timeSelection == Range<double>(engine.loopStart.load(), engine.loopEnd.load()) ? String::fromUTF8(" / ループ ON") : " / " + String(TRANS("Loop ")) + String(engine.loopStart.load(), 2) + " - " + String(engine.loopEnd.load(), 2) + " s";
-    label(g, transportInfo, {320, 106, 660, 18}, 11, engine.recording ? Colour(0xffff7a85) : engine.playing ? mint : dim);
+    label(g, transportInfo, {250, 109, 730, 17}, 11, engine.recording ? Colour(0xffff7a85) : engine.playing ? mint : dim);
     if (transportExpanded) {
         g.setColour(panel); g.fillRoundedRectangle(16, 130, float(getWidth() - 32), 54, 5);
         label(g, TRANS("COUNT IN"), {24, 130, 116, 20}, 10, dim);
-        label(g, TRANS("RECORDING"), {162, 130, 110, 20}, 10, dim);
+        label(g, String::fromUTF8("録音モード"), {162, 130, 110, 20}, 10, dim);
         label(g, TRANS("IN / seconds"), {284, 130, 82, 20}, 10, dim); label(g, TRANS("OUT / seconds"), {376, 130, 90, 20}, 10, dim);
         label(g, TRANS("LOOP IN / seconds"), {512, 130, 106, 20}, 10, dim); label(g, TRANS("LOOP OUT / seconds"), {628, 130, 118, 20}, 10, dim);
         label(g, TRANS("Record range adds a new take between In and Out."), {780, 149, getWidth() - 810, 28}, 11, dim);
@@ -861,12 +877,13 @@ void Workstation::resized() {
     fileButton.setBounds(214, 16, 100, 31); addButton.setBounds(326, 16, 96, 31);
     mixerButton.setBounds(434, 16, 94, 31);
     settingsButton.setBounds(getWidth() - 132, 16, 114, 31);
-    homeButton.setBounds(20, 76, 34, 32); playButton.setBounds(62, 76, 68, 32);
-    stopButton.setBounds(138, 76, 68, 32); recordButton.setBounds(214, 76, 84, 32);
+    homeButton.setBounds(20, 72, 42, 36); playButton.setBounds(70, 72, 44, 36);
+    stopButton.setBounds(122, 72, 44, 36); recordButton.setBounds(174, 72, 44, 36);
     tempo.setBounds(526, 76, 58, 30); metronomeButton.setBounds(600, 76, 132, 30);
     loopButton.setBounds(740, 76, 84, 30); snapButton.setBounds(832, 76, 76, 30);
     transportOptions.setBounds(916, 76, 64, 30);
     transportOptions.setToggleState(transportExpanded, dontSendNotification);
+    transportOptions.setButtonText(String::fromUTF8(transportExpanded ? "詳細 ▴" : "詳細 ▾"));
     for (auto* field : std::initializer_list<Component*>{&countIn, &recordRangeButton, &recordFrom, &recordTo, &loopFrom, &loopTo}) field->setVisible(transportExpanded);
     countIn.setBounds(24, 150, 116, 26); recordRangeButton.setBounds(162, 150, 110, 26);
     recordFrom.setBounds(284, 150, 82, 26); recordTo.setBounds(376, 150, 90, 26);

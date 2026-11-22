@@ -93,6 +93,15 @@ void runMixerTests(const File& directory, StringArray& passed) {
     w.setSize(1280, 820); w.transportExpanded = true; w.resized();
     check(w.viewport.getHeight() >= Timeline::ruler + 170 && w.horizontal.getBottom() <= w.mixer->getY() && w.mixer->getBottom() <= 820 - 27,
           "Mixer and expanded transport fit the minimum window without overlapping timeline controls");
+    w.viewport.setViewPosition(0, 0);
+    w.timeline.selectedClip = 0;
+    const auto lastTrack = int(e.tracks.size()) - 1;
+    w.mixer->strips.back()->name.onClick();
+    const auto lastTop = w.timeline.trackTop(lastTrack);
+    const auto viewTop = w.viewport.getViewPositionY();
+    check(w.selectedTrack == lastTrack && w.timeline.selectedClip == -1 && viewTop > 0
+          && lastTop >= viewTop + Timeline::ruler && lastTop + 64 <= viewTop + w.viewport.getViewHeight(),
+          "Selecting an offscreen mixer track reveals its controls below the fixed ruler and clears the previous track's clip selection");
     w.keyPressed(KeyPress(KeyPress::F3Key)); check(!w.mixerVisible && !w.mixer->isVisible(), "F3 hides the mixer and restores timeline space");
     e.reset(); e.addTrack("Temporary"); w.refresh(); w.toggleMixer(); auto emptyId = e.tracks[0]->id; w.removeTrackById(emptyId);
     check(w.mixer->strips.empty() && w.setMixerValue({}, -2), "An empty session keeps a safe usable master mixer strip");

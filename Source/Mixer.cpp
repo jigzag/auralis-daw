@@ -24,8 +24,20 @@ MixerStrip::MixerStrip(Workstation& w, String id) : trackId(std::move(id)), owne
     fader.onValueChange = [this] { owner.setMixerValue(trackId, fader.getValue()); };
     pan.onValueChange = [this] { owner.setMixerValue(trackId, pan.getValue(), true); };
     addAndMakeVisible(name); name.setWantsKeyboardFocus(false);
-    name.onClick = [this] { if (!owner.busy && trackId.isNotEmpty()) for (int i = 0; i < int(owner.engine.tracks.size()); ++i)
-        if (owner.engine.tracks[size_t(i)]->id == trackId) { owner.selectTrack(i); return; } };
+    name.onClick = [this] {
+        if (owner.busy || trackId.isEmpty()) return;
+        for (int i = 0; i < int(owner.engine.tracks.size()); ++i) {
+            if (owner.engine.tracks[size_t(i)]->id != trackId) continue;
+            if (owner.selectedTrack != i) owner.timeline.selectedClip = -1;
+            owner.selectTrack(i);
+            const int top = owner.timeline.trackTop(i);
+            const int viewY = owner.viewport.getViewPositionY();
+            const int visibleHeader = jmin(owner.timeline.trackHeight(i), 64);
+            if (top < viewY + Timeline::ruler || top + visibleHeader > viewY + owner.viewport.getViewHeight())
+                owner.viewport.setViewPosition(owner.viewport.getViewPositionX(), top - Timeline::ruler);
+            return;
+        }
+    };
     name.setTooltip(TRANS("Select this track in the arrangement"));
     for (auto entry : {std::pair<TextButton*, TrackControl>{&arm, TrackControl::recordArm}, {&mute, TrackControl::mute}, {&solo, TrackControl::solo}, {&monitor, TrackControl::monitor}}) {
         auto& button = *entry.first; addAndMakeVisible(button); button.setWantsKeyboardFocus(false);
