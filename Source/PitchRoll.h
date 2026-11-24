@@ -20,7 +20,9 @@ public:
     double pixels = 120;
     static constexpr int defaultRow = 22, highest = 96, lowest = 24;
     int row = defaultRow;
-    bool interacting() const { return dragging || selecting || drawingCurve; }
+    enum class Interaction { idle, noteDrag, marquee, curve };
+    Interaction interaction() const;
+    bool interacting() const { return interaction() != Interaction::idle; }
 private:
     PitchRollPanel& panel;
     bool dragging = false, selecting = false;

@@ -64,6 +64,27 @@ void runRecordingRangeTests(const File& directory, StringArray& passed) {
               "Stop during two-bar count-in creates no empty take and preserves transport position");
     }
     {
+        Engine engine; engine.recordingDirectory = directory.getChildFile("PartialTakeRecovery");
+        auto& bad = engine.addTrack("Unreadable take"); auto& good = engine.addTrack("Healthy take");
+        bad.armed = good.armed = true;
+        engine.startRecordingWriters();
+        AudioBuffer<float> input(2, 512), output(2, 512); input.clear();
+        engine.render(output.getArrayOfWritePointers(), 2, 512, input.getArrayOfReadPointers(), 2);
+        const auto original = bad.recordedFile;
+        const auto invalid = directory.getChildFile("invalid-recorded-material.wav");
+        check(invalid.replaceWithText("Not decodable"), "Partial recording test has an existing unreadable audio file");
+        bad.recordedFile = invalid;
+        const auto result = engine.finishRecording();
+        check(engine.recordingPhase() == RecordingPhase::idle && !bad.recorder && !good.recorder && original.existsAsFile(),
+              "A failed take decode releases all writers and preserves the captured source");
+        check(result.takesAdded == 1 && result.failures.size() == 1 && result.failures.front().recoveryFile == invalid
+              && good.clips.size() == 1 && invalid.existsAsFile(), "Partial recording reports the failed track and still adds the healthy take");
+        check(engine.finishRecording().takesAdded == 0 && good.clips.size() == 1, "A second finalization cannot append the same takes twice");
+        engine.startRecordingWriters(); engine.render(output.getArrayOfWritePointers(), 2, 512, input.getArrayOfReadPointers(), 2);
+        const auto next = engine.stop();
+        check(next.failures.empty() && next.takesAdded == 2, "Recording can start and finalize normally after partial failure");
+    }
+    {
         Workstation workstation(false); workstation.stopTimer(); auto& engine = workstation.engine;
         auto* count = dynamic_cast<ComboBox*>(workstation.findChildWithID("countIn"));
         auto* range = dynamic_cast<TextButton*>(workstation.findChildWithID("recordRange"));
@@ -79,8 +100,12 @@ void runRecordingRangeTests(const File& directory, StringArray& passed) {
         check(!count->isEnabled() && !range->isEnabled() && !from->isEnabled() && !to->isEnabled(), "Recording locks count-in and range controls");
         AudioBuffer<float> input(2, 512), output(2, 512); input.clear();
         while (!engine.recordingComplete) engine.render(output.getArrayOfWritePointers(), 2, 512, input.getArrayOfReadPointers(), 2);
+        check(engine.recordingPhase() == RecordingPhase::rangeComplete, "The stopped-at-Out interval is observable as recording finalization pending");
+        engine.lockMisses = 1; workstation.statusUntil = 0;
         workstation.timerCallback();
         check(!engine.recording && engine.tracks[0]->clips.size() == 1 && count->isEnabled() && range->isEnabled(), "UI finalizes completed range recording and restores controls");
+        check(workstation.status == String::fromUTF8("録音を確定しました。"), "Range recording completion is not replaced by a previous audio skip warning");
+        engine.lockMisses = 0;
         range->onClick(); check(!engine.recordRange, "Recording range can be disabled for ordinary recording");
         engine.loadProject(File::getCurrentWorkingDirectory().getChildFile("Demo/First light.auralis"));
         check(engine.countInBars == 0 && !engine.recordRange, "Older projects load with count-in and recording range off");

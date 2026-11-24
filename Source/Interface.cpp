@@ -29,6 +29,16 @@ String timeText(double t) { return String(int(t) / 60).paddedLeft('0', 2) + ":" 
 int armedTrackCount(const Engine& engine) {
     return int(std::count_if(engine.tracks.begin(), engine.tracks.end(), [](const auto& track) { return track->armed; }));
 }
+String taskName(BackgroundTask task) {
+    switch (task) {
+        case BackgroundTask::exportAudio: return String::fromUTF8("音声の書き出し");
+        case BackgroundTask::scanPlugins: return String::fromUTF8("VST3の検索");
+        case BackgroundTask::analysePitch: return String::fromUTF8("音程の解析");
+        case BackgroundTask::correctPitch: return String::fromUTF8("音程の補正");
+        case BackgroundTask::none: return String::fromUTF8("実行中の処理");
+    }
+    return {};
+}
 void label(Graphics& g, String s, Rectangle<int> r, float size = 12, Colour colour = dim) { g.setColour(colour); g.setFont(size); g.drawText(s, r, Justification::centredLeft); }
 double snapTime(const Workstation& w, double t) { double beat = 60.0 / w.engine.bpm.load(); return w.snap ? std::round(t / beat) * beat : t; }
 std::vector<int> clipDrawOrder(const Track& track, bool newestFirst = false) {
@@ -82,8 +92,7 @@ void TimelineRuler::syncTools(bool enabled) {
     selectTool.setToggleState(!timeline.isCutMode(), dontSendNotification); cutTool.setToggleState(timeline.isCutMode(), dontSendNotification);
     selectTool.setEnabled(enabled); cutTool.setEnabled(enabled);
     const auto& w = timeline.owner;
-    const bool active = w.hasTimeSelection || w.engine.loop || w.engine.recordRange;
-    clearRange.setVisible(active); clearRange.setEnabled(enabled && active);
+    clearRange.setVisible(w.hasActiveRange()); clearRange.setEnabled(enabled && w.canClearRange());
 }
 TrackControlRow::TrackControlRow(Workstation& owner, const String& trackId) : owner(owner), trackId(trackId) {
     setComponentID(trackId);
@@ -149,8 +158,7 @@ void TrackControlRow::sync(const Track& t, bool recording, bool busy) {
     if (!gain.isMouseButtonDown() && !(focused && gain.isParentOf(focused))) gain.setValue(Decibels::gainToDecibels(t.gain, -60.0f), dontSendNotification);
     if (!pan.isMouseButtonDown() && !(focused && pan.isParentOf(focused))) pan.setValue(t.pan, dontSendNotification);
     arm.setToggleState(t.armed, dontSendNotification); mute.setToggleState(t.mute, dontSendNotification); solo.setToggleState(t.solo, dontSendNotification); monitor.setToggleState(t.monitor, dontSendNotification);
-    const bool capturing = recording && owner.engine.countInRemaining == 0 && !owner.engine.recordingComplete
-        && (!owner.engine.recordRange || owner.engine.cursor >= owner.engine.recordFrom);
+    const bool capturing = owner.engine.recordingPhase() == RecordingPhase::capturing;
     arm.setButtonText(t.armed ? String(capturing ? "REC LIVE" : "REC ARM") : String("REC"));
     monitor.setButtonText(t.monitor ? "MON ON" : "MON");
     monitor.setTooltip(t.monitor ? String::fromUTF8("入力試聴中：このトラックのパートを消音し、マイク・ギターなどの入力を聴きます。OFFでパートの再生に戻ります。") : TRANS("Input monitor: hear live input instead of this track's clips"));
@@ -415,6 +423,13 @@ void Timeline::setCutMode(bool enabled) {
     if (isShowing()) grabKeyboardFocus();
     setMouseCursor(cutMode ? MouseCursor::CrosshairCursor : MouseCursor::NormalCursor);
     owner.setStatus(cutMode ? TRANS("Cut tool: click to split. C / V: select. Shift: free cut. Ctrl+Z: undo.") : TRANS("Select tool. C: toggle cut. Ctrl+Z: undo.")); repaint();
+}
+Timeline::Interaction Timeline::interaction() const {
+    if (headerDrag >= 0) return resizingTrack ? Interaction::trackResize : Interaction::trackMove;
+    if (selectingTime) return Interaction::range;
+    if (draggingPlayhead) return Interaction::seek;
+    if (dragTrack >= 0) return Interaction::clip;
+    return Interaction::idle;
 }
 void Timeline::mouseMove(const MouseEvent& e) {
     if (e.x < header && e.y >= ruler && !owner.engine.recording && !owner.busy) {
@@ -687,7 +702,7 @@ Workstation::Workstation(bool connectDevices, const File& pluginRegistry) : time
         rememberEdit(); engine.addMidiClip(selectedTrack, snapTime(*this, engine.cursor)); timeline.selectedClip = int(engine.tracks[size_t(selectedTrack)]->clips.size()) - 1; changed(); refresh(); showPianoRoll(selectedTrack, timeline.selectedClip); });
     buildButton(pianoButton, [this] { if (isPositiveAndBelow(selectedTrack, int(engine.tracks.size())) && engine.tracks[size_t(selectedTrack)]->midi) { int i = timeline.selectedClip < 0 ? 0 : timeline.selectedClip; if (isPositiveAndBelow(i, int(engine.tracks[size_t(selectedTrack)]->clips.size()))) showPianoRoll(selectedTrack, i); } });
     buildButton(settingsButton, [this] { audioSettings(); });
-    buildButton(panicButton, [this] { try { bool wasRecording = engine.recording; engine.stop(); if (wasRecording) changed(); refresh(); setStatus(TRANS("All notes stopped.")); } catch (const std::exception& e) { error(String::fromUTF8(e.what())); } });
+    buildButton(panicButton, [this] { stopTransport(true); });
     panicButton.setTooltip(TRANS("Stop playback / recording and silence all MIDI notes (Esc)"));
     buildButton(metronomeButton, [this] { engine.metronome = !engine.metronome; changed(); refresh(); });
     metronomeButton.setComponentID("metronome");
@@ -716,8 +731,8 @@ Workstation::Workstation(bool connectDevices, const File& pluginRegistry) : time
         field->setSelectAllWhenFocused(true); field->onFocusLost = applyRange;
         field->onReturnKey = [this] { grabKeyboardFocus(); };
     }
-    buildButton(playButton, [this] { if (engine.playing) engine.stop(); else engine.play(); refresh(); });
-    buildButton(stopButton, [this] { try { bool wasRecording = engine.recording; engine.stop(); if (wasRecording) changed(); refresh(); } catch (const std::exception& e) { error(String::fromUTF8(e.what())); } });
+    buildButton(playButton, [this] { if (engine.playing || engine.recording) stopTransport(); else { engine.play(); refresh(); } });
+    buildButton(stopButton, [this] { stopTransport(); });
     buildButton(recordButton, [this] {
         if (busy) return;
         if (!engine.recording && armedTrackCount(engine) == 0) {
@@ -725,7 +740,8 @@ Workstation::Workstation(bool connectDevices, const File& pluginRegistry) : time
             return;
         }
         try {
-            if (engine.recording) engine.finishRecording(); else engine.beginRecording();
+            if (engine.recording) { completeRecording(engine.recordingPhase()); return; }
+            engine.beginRecording();
             changed(); refresh();
         } catch (const std::exception& e) { error(String::fromUTF8(e.what())); }
     });
@@ -844,8 +860,10 @@ void Workstation::paint(Graphics& g) {
     label(g, timeText(engine.cursor), {250, 71, 226, 38}, 30, engine.recording ? Colour(0xffff7a85) : mint);
     label(g, "BPM", {488, 76, 34, 28}, 10);
     String transportInfo = engine.recording ? String::fromUTF8("録音中") : engine.playing ? String::fromUTF8("再生中") : String::fromUTF8("停止中");
-    if (engine.countInRemaining > 0) transportInfo = TRANS("Count ") + String(int(std::ceil(engine.countInRemaining * engine.bpm / (60.0 * engine.rate))));
-    else if (engine.recording && engine.recordRange && engine.cursor < engine.recordFrom) transportInfo = TRANS("Pre-roll");
+    const auto phase = engine.recordingPhase();
+    if (phase == RecordingPhase::rangeComplete || phase == RecordingPhase::interrupted) transportInfo = String::fromUTF8("録音を確定中");
+    else if (phase == RecordingPhase::countIn) transportInfo = TRANS("Count ") + String(int(std::ceil(engine.countInRemaining * engine.bpm / (60.0 * engine.rate))));
+    else if (phase == RecordingPhase::preRoll) transportInfo = TRANS("Pre-roll");
     else if (engine.countInBars > 0) transportInfo += " / " + TRANS("Count-in ") + String(engine.countInBars.load()) + TRANS(" bar") + (engine.countInBars > 1 ? "s" : "");
     if (hasTimeSelection) transportInfo += (transportInfo.isEmpty() ? "" : "   /   ") + String(TRANS("Selection ")) + String(timeSelection.getStart(), 2) + " - " + String(timeSelection.getEnd(), 2) + " s";
     if (engine.recordRange) transportInfo += hasTimeSelection && timeSelection == Range<double>(engine.recordFrom.load(), engine.recordTo.load()) ? String::fromUTF8(" / 範囲録音 ON") : " / " + String(TRANS("Record ")) + String(engine.recordFrom.load(), 2) + " - " + String(engine.recordTo.load(), 2) + " s";
@@ -914,7 +932,7 @@ void Workstation::setTimeSelection(double start, double end) {
     }
     refresh();
 }
-void Workstation::clearTimeSelection() {
+void Workstation::clearTimeSelection(bool notify) {
     if (busy || engine.recording) return;
     bool settingsChanged;
     {
@@ -925,7 +943,8 @@ void Workstation::clearTimeSelection() {
         timeline.cancelTimeSelection();
     }
     if (settingsChanged) changed();
-    setStatus(String::fromUTF8("時間範囲・ループ・範囲録音を解除しました。")); refresh();
+    if (notify) setStatus(String::fromUTF8("時間範囲・ループ・範囲録音を解除しました。"));
+    refresh();
 }
 void Workstation::togglePunchSelection() {
     if (busy || engine.recording) return;
@@ -991,8 +1010,8 @@ void Workstation::timerCallback() {
     rulerBar.syncTools(!busy && !engine.recording);
     rulerBar.repaint();
     if (busy) { repaint(); return; }
-    if (engine.recordingComplete) { try { engine.finishRecording(); changed(); refresh(); status = TRANS("Recording range complete. New take added; existing clips preserved."); } catch (const std::exception& e) { error(String::fromUTF8(e.what())); } }
-    if (engine.deviceInterrupted && engine.recording) { try { engine.finishRecording(); engine.deviceInterrupted = false; changed(); refresh(); status = TRANS("Audio device stopped; the take was finalized."); } catch (const std::exception& e) { error(String::fromUTF8(e.what())); } }
+    const auto phase = engine.recordingPhase();
+    if (phase == RecordingPhase::rangeComplete || phase == RecordingPhase::interrupted) completeRecording(phase);
     bool canEdit = !engine.recording;
     countIn.setEnabled(canEdit); recordRangeButton.setEnabled(canEdit); recordFrom.setEnabled(canEdit); recordTo.setEnabled(canEdit);
     tempo.setEnabled(canEdit); input.setEnabled(canEdit && !engine.tracks.empty()); newMidiButton.setEnabled(canEdit); pianoButton.setEnabled(canEdit);
@@ -1138,7 +1157,37 @@ void Workstation::applyControls() {
     if (mixer && mixerVisible) mixer->sync();
 }
 void Workstation::setStatus(const String& message) { status = message; statusUntil = Time::getMillisecondCounterHiRes() + 5000; repaint(); }
-void Workstation::error(const String& message) { status = message; AlertWindow::showMessageBoxAsync(MessageBoxIconType::NoIcon, "Auralis", japaneseMessage(message)); repaint(); }
+void Workstation::error(const String& message) { setStatus(message); AlertWindow::showMessageBoxAsync(MessageBoxIconType::NoIcon, "Auralis", japaneseMessage(message)); }
+void Workstation::reportRecording(const RecordingResult& result, const String& success) {
+    if (result.failures.empty()) { setStatus(success); return; }
+    String message = String::fromUTF8("録音の確定結果\n追加したテイク: ") + String(result.takesAdded)
+                   + String::fromUTF8(" / 失敗: ") + String(int(result.failures.size()));
+    for (const auto& failure : result.failures) {
+        message += "\n\n" + failure.trackName + ": " + japaneseMessage(failure.reason);
+        if (failure.recoveryFile != File()) message += String::fromUTF8("\n保存済みの録音ファイル: ") + failure.recoveryFile.getFullPathName();
+    }
+    error(message);
+}
+void Workstation::completeRecording(RecordingPhase phase) {
+    try {
+        const auto result = engine.finishRecording();
+        changed(); refresh();
+        String message = result.takesAdded > 0 ? String::fromUTF8("録音を確定しました。") : String::fromUTF8("録音を終了しました。追加されたテイクはありません。");
+        if (phase == RecordingPhase::interrupted) message = String::fromUTF8("音声デバイスが停止しました。") + message;
+        reportRecording(result, message);
+    } catch (const std::exception& e) { refresh(); error(String::fromUTF8(e.what())); }
+}
+void Workstation::stopTransport(bool panic) {
+    if (busy) return;
+    try {
+        const bool wasRecording = engine.recording;
+        const auto result = engine.stop();
+        if (wasRecording) changed();
+        refresh();
+        if (wasRecording) reportRecording(result, result.takesAdded > 0 ? String::fromUTF8("録音を確定しました。") : String::fromUTF8("録音を終了しました。追加されたテイクはありません。"));
+        else if (panic) setStatus(TRANS("All notes stopped."));
+    } catch (const std::exception& e) { refresh(); error(String::fromUTF8(e.what())); }
+}
 void Workstation::rememberEdit() {
     const ScopedLock guard(engine.lock); std::vector<std::vector<Clip>> state;
     for (auto& t : engine.tracks) state.push_back(t->clips); undo.push_back(std::move(state)); if (undo.size() > 40) undo.erase(undo.begin());
@@ -1264,7 +1313,7 @@ bool Workstation::keyPressed(const KeyPress& key) {
     if (projectStart && projectStart->isVisible()) { if (key == KeyPress::escapeKey) showProjectStart(false); return true; }
     if (dynamic_cast<TextEditor*>(Component::getCurrentlyFocusedComponent())) return false;
     if (key == KeyPress::F3Key) { toggleMixer(); return true; }
-    if (key == KeyPress::escapeKey) { timeline.setCutMode(false); panicButton.onClick(); clearTimeSelection(); return true; }
+    if (key == KeyPress::escapeKey) { timeline.setCutMode(false); panicButton.onClick(); clearTimeSelection(false); return true; }
     if (key == KeyPress::spaceKey) { playButton.triggerClick(); return true; }
     if (key.getModifiers().isCommandDown() && key.getKeyCode() == 'S') { save(false); return true; }
     if (key.getModifiers().isCommandDown() && key.getKeyCode() == 'Z') { undoEdit(); return true; }
@@ -1299,7 +1348,7 @@ MemoryBlock Workstation::pluginStateSnapshot() {
 }
 void Workstation::markProjectSaved() { savedPluginState = pluginStateSnapshot(); dirty = false; }
 void Workstation::requestClose(std::function<void()> action) {
-    if (busy) { error(TRANS("Wait for the current export or plugin scan to finish.")); return; }
+    if (busy) { error(taskName(backgroundState.task) + String::fromUTF8("が終わってから閉じてください。")); return; }
     if (blockForPitchEdits()) return;
     if (engine.recording) { error(TRANS("Stop recording before closing the project.")); return; }
     if (savePrompt) { savePrompt->toFront(true); return; }
@@ -1333,7 +1382,7 @@ void Workstation::projectMenu() {
     tools.addItem(15, TRANS("Cut tool    C"), !engine.recording, timeline.isCutMode());
     tools.addItem(16, TRANS("Cut selected clip at playhead    S"), engine.canSplitClip(selectedTrack, timeline.selectedClip, engine.cursor));
     tools.addSeparator(); tools.addItem(17, TRANS("Punch in selected range    P"), !engine.recording, engine.recordRange);
-    tools.addItem(18, TRANS("Clear time selection"), !engine.recording && (hasTimeSelection || engine.loop || engine.recordRange));
+    tools.addItem(18, TRANS("Clear time selection"), canClearRange());
     tools.addItem(19, TRANS("Repeat selected range    L"), !engine.recording, engine.loop);
     tools.addItem(22, TRANS("Follow playhead"), true, followPlayhead);
     menu.addSubMenu(TRANS("Tools"), tools);
@@ -1425,7 +1474,10 @@ void Workstation::loadProjectFile(const File& file) {
 void Workstation::installProject(const ProjectDocument& document, ProjectLoadApproval approval) {
     if (busy || engine.recording) return;
     try {
-        pitchWindows.clear(); pianoWindows.clear(); pluginWindows.clear(); engine.loadProject(document, approval); hasTimeSelection = false; projectFile = document.file();
+        engine.loadProject(document, approval, [this] {
+            pitchWindows.clear(); pianoWindows.clear(); pluginWindows.clear();
+        });
+        hasTimeSelection = false; timeSelection = {}; timeline.cancelTimeSelection(); projectFile = document.file();
         undo.clear(); selectTrack(0); timeline.selectedClip = -1; timeline.setCutMode(false);
         tempo.setText(String(engine.bpm.load(), 1)); loopFrom.setText(String(engine.loopStart, 2)); loopTo.setText(String(engine.loopEnd, 2));
         masterVolume.setValue(Decibels::gainToDecibels(engine.master.load()), dontSendNotification);
@@ -1448,15 +1500,46 @@ void Workstation::open() {
             MessageManager::callAsync([safe, file] { if (safe) safe->openSelectedProject(file); });
         });
 }
-void Workstation::runBackground(std::function<String()> work, std::function<void()> done) {
-    if (worker.joinable()) worker.join(); busy = true; setEnabled(false);
-    for (auto& w : pianoWindows) w->setEnabled(false); for (auto& w : pitchWindows) w->setEnabled(false); for (auto& w : pluginWindows) w->setEnabled(false); repaint();
-    worker = std::thread([safe = Component::SafePointer<Workstation>(this), work, done] {
-        String message; bool ok = true; try { message = work(); } catch (const std::exception& e) { message = String::fromUTF8(e.what()); ok = false; }
-        MessageManager::callAsync([safe, message, ok, done] { if (!safe) return; safe->busy = false; safe->setEnabled(true); safe->status = message;
-            for (auto& w : safe->pianoWindows) w->setEnabled(true); for (auto& w : safe->pitchWindows) w->setEnabled(true); for (auto& w : safe->pluginWindows) w->setEnabled(true);
-            if (ok && done) done(); if (!ok) safe->error(message); safe->refresh(); });
-    });
+void Workstation::runBackground(BackgroundTask task, std::function<String()> work, std::function<bool()> done) {
+    if (busy || engine.recording) return;
+    if (worker.joinable()) worker.join();
+    auto setAvailable = [](Workstation& w, bool available) {
+        w.busy = !available;
+        w.setEnabled(available);
+        for (auto& window : w.pianoWindows) window->setEnabled(available);
+        for (auto& window : w.pitchWindows) window->setEnabled(available);
+        for (auto& window : w.pluginWindows) window->setEnabled(available);
+    };
+    backgroundState = {task, TaskOutcome::running};
+    setAvailable(*this, false); repaint();
+    try {
+        worker = std::thread([safe = Component::SafePointer<Workstation>(this), work, done, task, setAvailable] {
+            String message;
+            bool ok = true;
+            try { message = work(); }
+            catch (const std::exception& e) { message = String::fromUTF8(e.what()); ok = false; }
+            catch (...) { message = taskName(task) + String::fromUTF8("に失敗しました。"); ok = false; }
+            MessageManager::callAsync([safe, message, ok, done, task, setAvailable] {
+                if (!safe) return;
+                setAvailable(*safe.getComponent(), true);
+                safe->backgroundState.outcome = ok ? TaskOutcome::succeeded : TaskOutcome::failed;
+                try {
+                    if (!ok) safe->error(message);
+                    else {
+                        safe->setStatus(message);
+                        if (done && !done()) safe->backgroundState.outcome = TaskOutcome::failed;
+                    }
+                } catch (...) {
+                    safe->backgroundState.outcome = TaskOutcome::failed;
+                    safe->error(taskName(task) + String::fromUTF8("の結果を反映できませんでした。"));
+                }
+                safe->refresh();
+            });
+        });
+    } catch (const std::exception& e) {
+        setAvailable(*this, true); backgroundState.outcome = TaskOutcome::failed;
+        error(String::fromUTF8(e.what())); refresh();
+    }
 }
 Range<double> Workstation::defaultExportRange() const {
     return hasTimeSelection ? timeSelection : Range<double>(0, jmax(1.0, engine.duration()) + jmax(2.0, engine.effectTailSeconds()));
@@ -1479,8 +1562,8 @@ void Workstation::exportAudio() {
         String extension = kbps ? "mp3" : "wav";
         safe->chooser = std::make_unique<FileChooser>("Export stereo " + extension.toUpperCase(), File::getSpecialLocation(File::userDocumentsDirectory).getChildFile("Mix." + extension), "*." + extension);
         safe->chooser->launchAsync(FileBrowserComponent::saveMode | FileBrowserComponent::canSelectFiles | FileBrowserComponent::warnAboutOverwriting,
-            [safe, start, end, bits, kbps, extension](const FileChooser& c) { if (!safe || c.getResult() == File()) return; auto file = c.getResult().withFileExtension(extension);
-                safe->engine.stop(); safe->setStatus(TRANS("Rendering stereo ") + extension.toUpperCase() + "..."); safe->runBackground([safe, file, start, end, bits, kbps] {
+            [safe, start, end, bits, kbps, extension](const FileChooser& c) { if (!safe || safe->busy || safe->engine.recording || c.getResult() == File()) return; auto file = c.getResult().withFileExtension(extension);
+                safe->engine.stop(); safe->setStatus(TRANS("Rendering stereo ") + extension.toUpperCase() + "..."); safe->runBackground(BackgroundTask::exportAudio, [safe, file, start, end, bits, kbps] {
                     if (kbps) safe->engine.exportMp3(file, start, end, kbps); else safe->engine.exportWav(file, start, end, bits);
                     return TRANS("Exported ") + file.getFileName() + (safe->engine.clipped > 0 ? " — clipping detected; reduce master volume." : ""); });
             });
@@ -1511,10 +1594,10 @@ void Workstation::scanPlugins() {
     chooser = std::make_unique<FileChooser>(TRANS("Select a VST3 plugin or a folder to scan"), File("C:/Program Files/Common Files/VST3"), "*");
     chooser->launchAsync(FileBrowserComponent::openMode | FileBrowserComponent::canSelectFiles | FileBrowserComponent::canSelectDirectories,
         [safe = Component::SafePointer<Workstation>(this)](const FileChooser& c) {
-            if (!safe || c.getResult() == File()) return;
+            if (!safe || safe->busy || safe->engine.recording || c.getResult() == File()) return;
             auto root = c.getResult(); safe->engine.stop(); safe->setStatus(TRANS("Scanning plugins in an isolated process..."));
             auto results = std::make_shared<Array<PluginDescription>>();
-            safe->runBackground([safe, root, results] {
+            safe->runBackground(BackgroundTask::scanPlugins, [safe, root, results] {
                 Array<File> candidates;
                 if (root.hasFileExtension("vst3")) candidates.add(root);
                 else { auto found = root.findChildFiles(File::findFilesAndDirectories, true, "*.vst3"); for (auto& f : found) {
@@ -1529,14 +1612,18 @@ void Workstation::scanPlugins() {
                     arguments.add("--scan-plugin"); arguments.add(file.getFullPathName()); arguments.add("--scan-output"); arguments.add(output.getFullPathName());
                     ChildProcess child;
                     if (!child.start(arguments, 0)) { failed++; continue; }
-                    if (!child.waitForProcessToFinish(45000)) { child.kill(); failed++; }
+                    if (!child.waitForProcessToFinish(45000)) { child.kill(); output.deleteFile(); failed++; continue; }
                     if (auto xml = parseXML(output)) { KnownPluginList list; list.recreateFromXml(*xml); for (auto& desc : list.getTypes()) results->add(desc); }
                     else failed++;
                     output.deleteFile();
                 }
                 return TRANS("Scan finished: ") + String(results->size()) + TRANS(" plugin(s), ") + String(failed) + TRANS(" skipped/failed.");
-            }, [safe, results] { if (!safe) return; for (auto& desc : *results) safe->knownPlugins.addType(desc);
-                if (!safe->savePluginRegistry()) safe->error("The scan completed, but the plugin list could not be saved. Check that the Auralis settings folder is writable.");
+            }, [safe, results] {
+                if (!safe) return false;
+                for (auto& desc : *results) safe->knownPlugins.addType(desc);
+                if (safe->savePluginRegistry()) return true;
+                safe->error("The scan completed, but the plugin list could not be saved. Check that the Auralis settings folder is writable.");
+                return false;
             });
         });
 }

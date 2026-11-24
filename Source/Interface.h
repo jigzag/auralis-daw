@@ -17,6 +17,9 @@ private:
     Icon icon;
 };
 enum class TrackControl { recordArm, mute, solo, monitor };
+enum class BackgroundTask { none, exportAudio, scanPlugins, analysePitch, correctPitch };
+enum class TaskOutcome { idle, running, succeeded, failed };
+struct TaskState { BackgroundTask task = BackgroundTask::none; TaskOutcome outcome = TaskOutcome::idle; };
 class TrackControlButton : public TextButton {
 public:
     using TextButton::TextButton;
@@ -85,7 +88,9 @@ public:
     int totalHeight() const;
     void setCutMode(bool);
     bool isCutMode() const { return cutMode; }
-    bool isInteracting() const { return draggingPlayhead || selectingTime || dragTrack >= 0 || headerDrag >= 0; }
+    enum class Interaction { idle, seek, range, clip, trackMove, trackResize };
+    Interaction interaction() const;
+    bool isInteracting() const { return interaction() != Interaction::idle; }
     void cancelTimeSelection() { selectingTime = false; rangeAnchor = 0; }
     double scroll = 0, zoom = 70;
     static constexpr int header = 320, seekLaneHeight = 26, ruler = 52, row = 224;
@@ -160,8 +165,12 @@ public:
     bool dirty = false, snap = true, busy = false;
     bool hasTimeSelection = false;
     Range<double> timeSelection;
+    bool hasActiveRange() const { return hasTimeSelection || engine.loop || engine.recordRange; }
+    bool canClearRange() const { return !busy && !engine.recording && hasActiveRange(); }
+    TaskState taskState() const { return backgroundState; }
+    void stopTransport(bool panic = false);
     void setTimeSelection(double start, double end);
-    void clearTimeSelection();
+    void clearTimeSelection(bool notify = true);
     void togglePunchSelection();
     void toggleLoopSelection();
     String status = TRANS("Ready. Import audio or arm a track to record.");
@@ -222,6 +231,7 @@ private:
     friend void runProjectSafetyTests(const File&, StringArray&);
     friend void runJapaneseTests(const File&, StringArray&);
     friend void runUxTests(const File&, StringArray&);
+    friend void runRecordingRangeTests(const File&, StringArray&);
     friend void runTrackDeleteTests(const File&, StringArray&);
     friend void runClipGainTests(const File&, StringArray&);
     friend void runNormalizeTests(const File&, StringArray&);
@@ -311,7 +321,10 @@ private:
     void scanPlugins();
     void insertPlugin();
     void showEditor();
-    void runBackground(std::function<String()> work, std::function<void()> done = {});
+    TaskState backgroundState;
+    void runBackground(BackgroundTask, std::function<String()> work, std::function<bool()> done = {});
+    void completeRecording(RecordingPhase);
+    void reportRecording(const RecordingResult&, const String& success);
     void updateTrack();
     void applyControls();
     File dataDirectory() const;

@@ -4,6 +4,7 @@
 #include <vector>
 #include <memory>
 #include <map>
+#include <functional>
 #include "ProjectSafety.h"
 #include <array>
 
@@ -118,6 +119,14 @@ struct Track {
     MidiBuffer midiBuffer;
 };
 
+enum class RecordingPhase { idle, countIn, preRoll, capturing, rangeComplete, interrupted };
+
+struct RecordingResult {
+    struct Failure { String trackName; File recoveryFile; String reason; };
+    int takesAdded = 0;
+    std::vector<Failure> failures;
+};
+
 class Engine : public AudioIODeviceCallback, public AudioPlayHead {
 public:
     Engine();
@@ -170,7 +179,7 @@ public:
     double duration() const;
     double effectTailSeconds() const;
     void play();
-    void stop();
+    RecordingResult stop();
     void seek(double);
     bool startPitchPreview(const String& ownerId, const String& trackId, std::shared_ptr<SourceAudio>, double start, double end, double semitones, float gainDb = 0, double position = -1, std::shared_ptr<const PitchPreviewCurve> = {});
     void updatePitchPreview(const String& ownerId, double semitones);
@@ -180,14 +189,15 @@ public:
     void clearPitchLoop(const String& ownerId = {});
     bool ownsPitchLoop(const String& ownerId);
     void beginRecording();
-    void finishRecording();
+    RecordingPhase recordingPhase() const;
+    RecordingResult finishRecording();
     void addPlugin(int track, const PluginDescription&, const MemoryBlock* state = nullptr);
     void removePlugin(int track, int insert);
     void exportWav(const File&, double start, double end, int bits = 24);
     void exportMp3(const File&, double start, double end, int kbps = 320);
     void saveProject(const File&);
     void loadProject(const File&, ProjectLoadApproval = {});
-    void loadProject(const ProjectDocument&, ProjectLoadApproval = {});
+    void loadProject(const ProjectDocument&, ProjectLoadApproval = {}, std::function<void()> beforeCommit = {});
     void reset();
     void render(float* const*, int numOutputs, int n, const float* const* input = nullptr, int numInputs = 0, bool collectLiveMidi = false);
     Optional<PositionInfo> getPosition() const override;

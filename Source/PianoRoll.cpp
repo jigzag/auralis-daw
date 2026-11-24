@@ -220,8 +220,8 @@ void PianoRoll::fitClip() {
 }
 bool PianoRoll::keyPressed(const KeyPress& key) {
     if (!owner) return false;
-    if (key == KeyPress::escapeKey) { endPreview(); owner->engine.stop(); owner->refresh(); return true; }
-    if (key == KeyPress::spaceKey) { if (owner->engine.playing) owner->engine.stop(); else owner->engine.play(); return true; }
+    if (key == KeyPress::escapeKey) { endPreview(); owner->stopTransport(); return true; }
+    if (key == KeyPress::spaceKey) { if (owner->engine.playing || owner->engine.recording) owner->stopTransport(); else owner->engine.play(); return true; }
     if (key.getKeyCode() == 'L' && !key.getModifiers().isCommandDown()) { owner->toggleLoopSelection(); return true; }
     if (key.getKeyCode() == 'F' && !key.getModifiers().isCommandDown()) { fitClip(); return true; }
     if (owner->engine.recording) return true;
@@ -252,7 +252,7 @@ PianoRollPanel::PianoRollPanel(Workstation& w, String track, String clip) : roll
     velocity.onValueChange = [this] { roll.setVelocity(int(velocity.getValue())); };
     roll.selectionChanged = [this] { velocity.setValue(roll.velocity, dontSendNotification); channel.setSelectedId(roll.channel, dontSendNotification); };
     quantize.onClick = [this] { roll.quantize(); };
-    play.onClick = [safe = Component::SafePointer<Workstation>(&w)] { if (safe) { if (safe->engine.playing) safe->engine.stop(); else safe->engine.play(); } };
+    play.onClick = [safe = Component::SafePointer<Workstation>(&w)] { if (safe && !safe->busy) { if (safe->engine.playing || safe->engine.recording) safe->stopTransport(); else safe->engine.play(); } };
     setSize(1080, 650); viewport.setViewPosition(0, 28 + (127 - 88) * 16);
 }
 void PianoRollPanel::resized() {

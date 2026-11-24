@@ -2,6 +2,12 @@
 #include <cmath>
 
 namespace auralis {
+PitchRollGrid::Interaction PitchRollGrid::interaction() const {
+    if (drawingCurve) return Interaction::curve;
+    if (selecting) return Interaction::marquee;
+    if (dragging) return Interaction::noteDrag;
+    return Interaction::idle;
+}
 PitchRollGrid::PitchRollGrid(PitchRollPanel& p) : panel(p) { setWantsKeyboardFocus(true); setMouseCursor(MouseCursor::UpDownResizeCursor); }
 Rectangle<float> PitchRollGrid::noteBounds(int i) const {
     if (!isPositiveAndBelow(i, int(panel.notes.size()))) return {};
@@ -186,7 +192,7 @@ bool PitchRollGrid::keyPressed(const KeyPress& key) {
     if (command && key.getKeyCode() == 'A') { panel.selected.clear(); for (int i = 0; i < int(panel.notes.size()); ++i) panel.selected.insert(i); repaint(); return true; }
     if (command && key.getKeyCode() == 'S') return panel.owner->keyPressed(key);
     if (command && key.getKeyCode() == KeyPress::returnKey) { panel.apply(); return true; }
-    if (key == KeyPress::spaceKey) { if (panel.owner->engine.playing) panel.owner->engine.stop(); else panel.apply(true); return true; }
+    if (key == KeyPress::spaceKey) { if (panel.owner->engine.playing || panel.owner->engine.recording) panel.owner->stopTransport(); else panel.apply(true); return true; }
     if (key.getKeyCode() == KeyPress::upKey || key.getKeyCode() == KeyPress::downKey) { panel.moveSelected((key.getKeyCode() == KeyPress::upKey ? 1 : -1) * (command ? 0.01 : 1.0)); return true; }
     if (key == KeyPress::deleteKey || key == KeyPress::backspaceKey) { panel.restoreSelected(); return true; }
     if (key.getKeyCode() == 'F' && !command) { panel.fit(); return true; }

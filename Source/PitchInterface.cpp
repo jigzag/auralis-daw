@@ -53,15 +53,16 @@ bool Workstation::startPitchCorrection(const String& trackId, const String& clip
     const File output = dataDirectory().getChildFile("Pitch/Corrected-" + Uuid().toString() + ".wav");
     setStatus(String::fromUTF8("音程を解析・補正しています..."));
     auto result = std::make_shared<PitchCorrectionResult>();
-    runBackground([before, settings, output, result] {
+    runBackground(BackgroundTask::correctPitch, [before, settings, output, result] {
         *result = renderPitchCorrection(before, settings, output);
         return String::fromUTF8("音程補正が完了しました。Ctrl+Zで戻せます。");
     }, [safe = Component::SafePointer<Workstation>(this), trackId, clipId, before, settings, result, after] {
-        if (!safe) return;
+        if (!safe) return false;
         if (result->correctedFrames == 0) safe->setStatus(String::fromUTF8("指定した補正範囲で音程を変更する箇所はありませんでした。"));
         const bool installed = safe->installPitchCorrection(trackId, clipId, before, settings, result->source);
         if (installed && after) after();
-        else if (!installed && after) safe->setStatus(String::fromUTF8("パートが変更されたため、音程編集を適用できませんでした。再解析してください。"));
+        else if (!installed && result->correctedFrames > 0) safe->setStatus(String::fromUTF8("パートが変更されたため、音程編集を適用できませんでした。再解析してください。"));
+        return installed || (result->correctedFrames == 0 && !after);
     });
     return true;
 }

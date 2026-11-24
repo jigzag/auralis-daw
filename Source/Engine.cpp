@@ -191,9 +191,10 @@ void Engine::prepareTrack(Track& track) {
     }
 }
 void Engine::play() { stopPitchPreview({}, true); midiDiscontinuity = true; playing = true; }
-void Engine::stop() {
+RecordingResult Engine::stop() {
     stopPitchPreview({}, true);
-    if (recording) finishRecording();
+    RecordingResult result;
+    if (recording) result = finishRecording();
     playing = false;
     midiDiscontinuity = true;
     const ScopedLock guard(lock);
@@ -207,6 +208,7 @@ void Engine::stop() {
         for (int ch = 1; ch <= 16; ++ch) { panic.addEvent(MidiMessage::controllerEvent(ch, 64, 0), 0); panic.addEvent(MidiMessage::allSoundOff(ch), 0); }
         port->sendBlockOfMessagesNow(panic);
     }
+    return result;
 }
 void Engine::seek(double seconds) {
     const ScopedLock guard(lock);
@@ -268,21 +270,50 @@ void Engine::startRecordingWriters() {
     countInRemaining = countInTotal;
     dropped = 0; deviceInterrupted = false; midiDiscontinuity = true; recording = true; playing = true;
 }
-void Engine::finishRecording() {
+RecordingPhase Engine::recordingPhase() const {
+    if (!recording) return RecordingPhase::idle;
+    if (recordingComplete) return RecordingPhase::rangeComplete;
+    if (deviceInterrupted) return RecordingPhase::interrupted;
+    if (countInRemaining > 0) return RecordingPhase::countIn;
+    if (recordRange && cursor < recordFrom) return RecordingPhase::preRoll;
+    return RecordingPhase::capturing;
+}
+RecordingResult Engine::finishRecording() {
     const ScopedLock guard(lock);
+    std::vector<Track*> audioTakes;
+    audioTakes.reserve(tracks.size());
+    RecordingResult result;
+    result.failures.reserve(tracks.size());
     recording = false; playing = false;
-    countInRemaining = 0; recordingComplete = false;
+    countInRemaining = 0; recordingComplete = false; deviceInterrupted = false;
     midiDiscontinuity = true;
-    for (auto& t : tracks) if (t->recordingMidi) finishMidiCapture(*t);
-    for (auto& t : tracks) if (t->recorder) {
-        t->recorder.reset(); // flush and close before reader opens it
-        if (t->recordedSamples > 0) {
-            auto source = readAudio(t->recordedFile);
-            Clip c; c.source = source; c.start = t->recordStart;
-            c.length = source->samples.getNumSamples() / source->rate;
-            c.name = t->recordedFile.getFileNameWithoutExtension(); stampNewClip(c); t->clips.push_back(c);
-        } else t->recordedFile.deleteFile();
+    for (auto& track : tracks) if (track->recorder) {
+        audioTakes.push_back(track.get());
+        track->recorder.reset();
     }
+    for (auto& track : tracks) if (track->recordingMidi) {
+        const auto previousSize = track->clips.size();
+        try {
+            finishMidiCapture(*track);
+            if (track->clips.size() != previousSize) ++result.takesAdded;
+        } catch (const std::exception& e) {
+            result.failures.push_back({track->name, {}, String::fromUTF8(e.what())});
+        }
+    }
+    for (auto* track : audioTakes) {
+        if (track->recordedSamples <= 0) { track->recordedFile.deleteFile(); continue; }
+        try {
+            auto source = readAudio(track->recordedFile);
+            Clip clip; clip.source = source; clip.start = track->recordStart;
+            clip.length = source->samples.getNumSamples() / source->rate;
+            clip.name = track->recordedFile.getFileNameWithoutExtension();
+            stampNewClip(clip); track->clips.push_back(std::move(clip)); ++result.takesAdded;
+        } catch (const std::exception& e) {
+            const File recoveryFile = track->recordedFile.existsAsFile() ? track->recordedFile : File();
+            result.failures.push_back({track->name, recoveryFile, String::fromUTF8(e.what())});
+        }
+    }
+    return result;
 }
 void Engine::addPlugin(int index, const PluginDescription& description, const MemoryBlock* state) {
     require(!recording, "Stop recording before changing plugins.");
@@ -675,7 +706,7 @@ void Engine::saveProject(const File& file) {
     require(file.replaceWithText(JSON::toString(root, false)), "Project could not be saved.");
 }
 void Engine::loadProject(const File& file, ProjectLoadApproval approval) { require(!recording, "Stop recording before opening a project."); const auto document = ProjectDocument::read(file); loadProject(*document, approval); }
-void Engine::loadProject(const ProjectDocument& document, ProjectLoadApproval approval) {
+void Engine::loadProject(const ProjectDocument& document, ProjectLoadApproval approval, std::function<void()> beforeCommit) {
     require(!recording, "Stop recording before opening a project.");
     document.requireApproval(approval);
     const auto& root = document.root;
@@ -773,7 +804,10 @@ void Engine::loadProject(const ProjectDocument& document, ProjectLoadApproval ap
         PluginDescription desc; auto xml = parseXML(v["xml"].toString()); require(xml && desc.loadFromXml(*xml), "Invalid master plugin description.");
         auto state = decodeProjectBlock(v["state"].toString(), ProjectLimits::stateBytes); validateProjectPluginPath(desc); staging.addPlugin(-1, desc, &state); staging.masterInserts.back()->bypass = bool(v["bypass"]);
     }
-    stop(); clearPitchLoop(); const ScopedLock guard(lock); tracks.swap(staging.tracks);
+    stop(); clearPitchLoop();
+    // Editors must detach after staging succeeds and before the old instances are released.
+    if (beforeCommit) beforeCommit();
+    const ScopedLock guard(lock); tracks.swap(staging.tracks);
     masterInserts.swap(staging.masterInserts); for (auto& p : masterInserts) p->instance->setPlayHead(this);
     nextClipOrder = staging.nextClipOrder;
     for (auto& t : tracks) for (auto& p : t->inserts) p->instance->setPlayHead(this);

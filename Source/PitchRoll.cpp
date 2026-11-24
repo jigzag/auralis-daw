@@ -17,7 +17,7 @@ PitchRollPanel::PitchRollPanel(Workstation& w, String track, String clip, const 
         addAndMakeVisible(b); b.setComponentID(name); b.setButtonText(text); b.setWantsKeyboardFocus(false); b.onClick = std::move(action);
     };
     button(play, "pitchPlay", String::fromUTF8("再生"), [this] { apply(true); });
-    button(stop, "pitchStop", String::fromUTF8("停止"), [this] { if (owner && !owner->busy) owner->engine.stop(); });
+    button(stop, "pitchStop", String::fromUTF8("停止"), [this] { if (owner) owner->stopTransport(); });
     button(applyButton, "pitchApply", String::fromUTF8("適用"), [this] { apply(); });
     button(undoButton, "pitchUndo", String::fromUTF8("元に戻す"), [this] { undoLocal(); });
     button(discardButton, "pitchDiscard", String::fromUTF8("変更を破棄"), [this] { discard(); });
