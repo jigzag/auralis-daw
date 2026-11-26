@@ -103,6 +103,20 @@ void runPitchCorrectionTests(const File& directory, StringArray& passed) {
     check(loaded.tracks[0]->clips[0].pitchOriginal && loaded.tracks[0]->clips[0].pitchSettings.amount == 1
           && peakError(loaded.tracks[0]->clips[0].source, 440) < 3 && peakError(loaded.tracks[0]->clips[0].pitchOriginal, 440 * std::pow(2.0, 35.0 / 1200)) < 3,
           "Project reload preserves both processed and original audio plus correction settings");
+    auto legacy = JSON::parse(project.loadFileAsString());
+    const auto legacyEdits = JSON::parse(R"([{"start":0.5,"end":0.5,"original":69,"target":69,"curve":[[0.5,69],[0.8,69.2]]},{"start":0.5,"end":0.8,"original":69,"target":69,"curve":[[0.5,69],[0.8,69.2]]}])");
+    legacy["tracks"][0]["clips"][0]["pitchCorrection"].getDynamicObject()->setProperty("noteEdits", legacyEdits);
+    const auto legacyFile = directory.getChildFile("pitch-legacy-empty-edit.auralis");
+    const String legacyText = JSON::toString(legacy);
+    check(legacyFile.replaceWithText(legacyText), "Legacy pitch compatibility fixture writes adjacent empty and valid edits");
+    loaded.loadProject(legacyFile);
+    const auto& restored = loaded.tracks[0]->clips[0];
+    check(restored.pitchSettings.notes.size() == 1 && restored.pitchSettings.notes[0].start == 0.5
+          && restored.pitchSettings.notes[0].curve.size() == 2 && restored.pitchOriginal && peakError(restored.source, 440) < 3
+          && legacyFile.loadFileAsString() == legacyText, "Loading an empty legacy edit preserves the valid curve and processed audio without rewriting the file");
+    auto repaired = directory.getChildFile("pitch-repaired-empty-edit.auralis");
+    loaded.saveProject(repaired); loaded.loadProject(repaired);
+    check(loaded.tracks[0]->clips[0].pitchSettings.notes.size() == 1, "Resaving and reopening a legacy project keeps its meaningful pitch edits");
     auto invalidProject = JSON::parse(project.loadFileAsString());
     invalidProject["tracks"][0]["clips"][0]["pitchCorrection"].getDynamicObject()->setProperty("scale", 99);
     auto invalidFile = directory.getChildFile("pitch-invalid.auralis"); invalidFile.replaceWithText(JSON::toString(invalidProject));

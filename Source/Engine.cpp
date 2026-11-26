@@ -1,5 +1,6 @@
 #include "Engine.h"
 #include "NativeEffects.h"
+#include "PitchCorrection.h"
 #include "SpaceEffects.h"
 #include <cmath>
 #include <stdexcept>
@@ -675,6 +676,7 @@ void Engine::saveProject(const File& file) {
                 set(pitch, "maxCents", settings.maxCents); set(pitch, "preserveFormants", settings.preserveFormants); set(pitch, "manual", settings.manual);
                 Array<var> edits;
                 for (const auto& note : settings.notes) {
+                    if (note.end >= note.start && note.end - note.start <= pitchBoundaryTolerance) continue;
                     var item = object(); set(item, "start", note.start); set(item, "end", note.end); set(item, "original", note.original); set(item, "target", note.target);
                     if (note.scoop.enabled) {
                         var scoop = object(); set(scoop, "start", note.scoop.start); set(scoop, "depthCents", note.scoop.depthCents);
@@ -785,7 +787,12 @@ void Engine::loadProject(const ProjectDocument& document, ProjectLoadApproval ap
                                 edit.curve.push_back({double(point[0]), double(point[1])});
                             }
                         }
-                        require(edit.end <= original->samples.getNumSamples() / original->rate + 0.001, "Pitch note edit exceeds source audio."); settings.notes.push_back(std::move(edit));
+                        require(edit.end <= original->samples.getNumSamples() / original->rate + 0.001, "Pitch note edit exceeds source audio.");
+                        const auto start = note["start"], end = note["end"];
+                        const auto numeric = [](const var& value) { return value.isDouble() || value.isInt() || value.isInt64(); };
+                        // Earlier builds could serialize equivalent boundaries as an empty edit.
+                        if (numeric(start) && numeric(end) && edit.start >= 0 && edit.end == edit.start) continue;
+                        settings.notes.push_back(std::move(edit));
                     }
                 }
                 require(settings.valid(), "Invalid saved pitch correction settings."); c.pitchOriginal = original;

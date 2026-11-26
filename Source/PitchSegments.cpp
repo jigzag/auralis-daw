@@ -74,15 +74,15 @@ std::vector<PitchSegment> pitchSegments(const Clip& clip, const std::vector<Pitc
     // Restore those source-relative regions without expanding neighbouring notes.
     for (const auto& edit : clip.pitchSettings.notes) if (!edit.curve.empty()) {
         double start = jmax(clip.offset, edit.start), end = jmin(clip.offset + clip.length, edit.end);
-        if (end <= start) continue;
+        if (end - start <= pitchBoundaryTolerance) continue;
         std::vector<PitchSegment> missing;
         for (const auto& region : detected) {
             if (region.end <= start) continue;
             if (region.start >= end) break;
-            if (region.start > start) missing.push_back({start, region.start, edit.original, edit.target, false});
+            if (region.start - start > pitchBoundaryTolerance) missing.push_back({start, region.start, edit.original, edit.target, false});
             start = jmax(start, region.end); if (start >= end) break;
         }
-        if (start < end) missing.push_back({start, end, edit.original, edit.target, false});
+        if (end - start > pitchBoundaryTolerance) missing.push_back({start, end, edit.original, edit.target, false});
         detected.insert(detected.end(), missing.begin(), missing.end());
         std::sort(detected.begin(), detected.end(), [](const auto& a, const auto& b) { return a.start < b.start; });
     }
@@ -98,6 +98,7 @@ std::vector<PitchSegment> pitchSegments(const Clip& clip, const std::vector<Pitc
         std::sort(boundaries.begin(), boundaries.end()); boundaries.erase(std::unique(boundaries.begin(), boundaries.end()), boundaries.end());
         for (int i = 0; i + 1 < int(boundaries.size()); ++i) {
             PitchSegment segment; segment.start = boundaries[size_t(i)]; segment.end = boundaries[size_t(i + 1)];
+            if (segment.end - segment.start <= pitchBoundaryTolerance) continue;
             std::vector<double> notes, shifts;
             const auto first = std::lower_bound(frames.begin(), frames.end(), segment.start - clip.offset, [](const auto& frame, double seconds) { return frame.seconds < seconds; });
             for (auto it = first; it != frames.end() && clip.offset + it->seconds < segment.end; ++it) if (it->voiced) { notes.push_back(it->note); shifts.push_back(it->shift); }

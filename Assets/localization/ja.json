@@ -303,6 +303,7 @@
   "Project must contain valid UTF-8 JSON without NUL bytes.": "プロジェクトはNUL文字を含まないUTF-8のJSONで保存してください。",
   "This project requires approval before loading external VST plugins.": "外部VSTを含むプロジェクトのため、読み込み前に許可が必要です。",
   "This project requires approval before reading media outside its folder.": "プロジェクトのフォルダ外に素材があるため、読み込み前に許可が必要です。",
+  "Invalid saved pitch correction settings.": "保存された音程補正の設定に不正な値があります。",
   "Hide": "閉じる",
   "Select this track in the arrangement": "タイムラインでこのトラックを選択します。"
 }

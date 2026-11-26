@@ -297,6 +297,7 @@ PitchCorrectionSettings PitchRollPanel::settings() const {
         else { if (n.start < snapshot.offset) { auto left = n; left.end = snapshot.offset; if (left.scoop.enabled && left.scoop.start >= left.end) left.scoop = {}; result.notes.push_back(left); } if (n.end > snapshot.offset + snapshot.length) { n.start = snapshot.offset + snapshot.length; result.notes.push_back(n); } }
     }
     for (const auto& n : notes) if (n.edited) result.notes.push_back({n.start, n.end, n.original, n.target, n.scoop, n.curve});
+    std::erase_if(result.notes, [](const auto& edit) { return edit.end - edit.start <= pitchBoundaryTolerance; });
     std::sort(result.notes.begin(), result.notes.end(), [](const auto& a, const auto& b) { return a.start < b.start; }); return result;
 }
 bool PitchRollPanel::apply(bool playAfter) {

@@ -3,6 +3,8 @@
 #include <optional>
 
 namespace auralis {
+// Sub-nanosecond differences between equivalent analysis boundaries are rounding noise.
+inline constexpr double pitchBoundaryTolerance = 1e-9;
 struct PitchFrame {
     double seconds = 0, note = 0, shift = 0;
     double level = 0;

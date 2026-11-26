@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(Auralis VERSION 0.4.45 LANGUAGES C CXX)
+project(Auralis VERSION 0.4.46 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 add_subdirectory(vendor/JUCE)

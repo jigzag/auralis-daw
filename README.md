@@ -1,4 +1,4 @@
-# Auralis 0.4.45 — Windows Audio + MIDI Workstation
+# Auralis 0.4.46 — Windows Audio + MIDI Workstation
 
 Windows 10/11 x64用の、ASIO入出力・音声／MIDI録音・ピアノロール・VST3ホスト・ミックス書き出しを備えたDAWの初期版です。Suno APIには依存しません。0.1で保存した音声プロジェクトも読み込めます。
 
